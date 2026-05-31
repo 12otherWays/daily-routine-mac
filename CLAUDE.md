@@ -10,7 +10,7 @@ swift run                    # run (or open the built binary directly)
 .build/arm64-apple-macosx/debug/DailyRoutineApp
 ```
 
-Requirements: macOS 14+, Swift 5.9+. Fonts **Instrument Serif** and **JetBrains Mono** must be installed system-wide (used via `Font.custom`).
+Requirements: macOS 14+, Swift 5.9+, **Xcode Command Line Tools** (`xcode-select --install`). Full Xcode.app is NOT required. Fonts **Instrument Serif** and **JetBrains Mono** must be installed system-wide (used via `Font.custom`).
 
 ## Project Structure
 
@@ -19,9 +19,12 @@ Sources/DailyRoutineApp/
 ├── DailyRoutineApp.swift          # @main entry, WindowGroup, keyboard shortcuts
 ├── ContentView.swift              # Root layout: header + content + nav bar + overlays
 ├── Models/
-│   └── Models.swift               # RoutineTask, RoutineTemplate, AppData, Prefs, ViewMode, SettingsTab
+│   ├── Models.swift               # RoutineTask, RoutineTemplate, AppData, Prefs, ViewMode, SettingsTab
+│   └── Entities.swift             # stub (SwiftData removed)
 ├── Store/
-│   └── AppStore.swift             # @MainActor ObservableObject; all state + persistence + navigation
+│   ├── AppStore.swift             # @MainActor ObservableObject; all state + navigation + cache
+│   ├── TaskRepository.swift       # TaskRepository protocol + UserDefaultsTaskRepository
+│   └── StoreMigration.swift       # stub (migration removed)
 ├── Styles/
 │   └── AppStyles.swift            # AppColors, AppFonts, EyebrowStyle, PillStyle, hardShadow modifier
 ├── Utils/
@@ -30,9 +33,10 @@ Sources/DailyRoutineApp/
 └── Views/
     ├── Header/HeaderView.swift    # Title, eyebrow badge, stat items, ViewToggle, statsModeControl
     ├── NavBar/NavBarView.swift    # Prev/Next arrows, day tabs (day mode), period label (week/month), Today button, calendar popover
+    ├── Calendar/CalendarDrawerView.swift  # Slide-in calendar drawer
     ├── Sheet/
     │   ├── SheetView.swift        # Day-view table: column header + task rows + add footer
-    │   └── TaskRowView.swift      # Single task row: checkbox, name (inline edit), priority menu, category menu, actions
+    │   └── TaskRowView.swift      # Single task row: checkbox, name (inline edit), priority pill, category menu, actions
     ├── Drawer/DrawerView.swift    # Slide-in detail panel: name, description, priority, category, done toggle
     ├── WeekView/WeekView.swift    # 7-column weekly grid
     ├── MonthView/MonthView.swift  # Monthly calendar grid
@@ -59,8 +63,19 @@ Prefs         { onboarded: Bool }
 ```
 
 - Day keys are `yyyy-MM-dd` strings (ISO, en_US_POSIX locale).
-- Persisted to `UserDefaults` under keys `routine:v2` (AppData) and `routine:prefs` (Prefs).
-- Saves are debounced 250ms via `DispatchWorkItem`.
+- `AppData` is persisted as a single JSON blob to `UserDefaults` under key `routine:v2`.
+- `Prefs` is persisted to `UserDefaults` under key `routine:prefs`.
+- All saves are debounced 250ms via `DispatchWorkItem` (text edits) or immediate (structural mutations).
+
+## Persistence Layer
+
+All data access goes through the `TaskRepository` protocol (`TaskRepository.swift`). The concrete implementation is `UserDefaultsTaskRepository`, which:
+
+- Loads `AppData` from `UserDefaults` on init; seeds `AppData.defaultSeed` on fresh install.
+- Operates on the full dataset in memory.
+- Flushes to `UserDefaults` on every `save()` call.
+
+`AppStore` holds a `private let repository: TaskRepository` and a per-day task cache (`dayCache`). After any mutation, `invalidate(day:)` clears the relevant cache entry and increments `dataVersion` (a `@Published` counter) to trigger SwiftUI re-renders.
 
 ## State Management
 
@@ -68,12 +83,13 @@ Everything lives in `AppStore` (single source of truth, injected as `@Environmen
 
 | Property | Type | Purpose |
 |---|---|---|
-| `appData` | `AppData` | All tasks, templates, categories |
+| `appData` | via `repository` | All tasks, templates, categories |
 | `prefs` | `Prefs` | Onboarding flag |
 | `activeDay` | `String` | Currently focused date key |
 | `viewMode` | `ViewMode` | `.day / .week / .month / .stats` |
 | `drawerTaskId` | `String?` | Non-nil → DrawerView slides in |
 | `settingsTab` | `SettingsTab?` | Non-nil → SettingsView slides in |
+| `calendarDrawerOpen` | `Bool` | Calendar drawer slide-in |
 | `templatePickerOpen` | `Bool` | Template picker sheet |
 | `isLoading` | `Bool` | Initial load gate |
 
@@ -86,9 +102,18 @@ Everything lives in `AppStore` (single source of truth, injected as `@Environmen
 
 ## Sidebar Overlays
 
-Both DrawerView and SettingsView are `.overlay(alignment: .trailing)` on `mainLayout`. They animate in/out via `.spring(response: 0.32, dampingFraction: 0.85)`.
+DrawerView, SettingsView, and CalendarDrawerView are rendered in a `ZStack(alignment: .trailing)` in `ContentView`. They animate in/out via `.spring(response: 0.32, dampingFraction: 0.85)`.
 
-A transparent backdrop (`Color.clear.contentShape(Rectangle())`) is applied to the **ScrollView only** (not the NavBar) so clicking the main content area closes sidebars without blocking nav buttons.
+When any drawer is open (`anyDrawerOpen`), a `Color.black.opacity(0.12)` overlay covers the main layout; tapping it dismisses all drawers. This overlay does NOT cover the NavBar.
+
+## TaskRowView — Row Behaviour
+
+Column widths: checkbox 44, priority 100, category 130, actions 72, name fills remainder.
+
+- **Checkbox**: `.buttonStyle(.plain)` + `.contentShape(Rectangle())` ensures the full 44pt column is tappable, not just the 20×20 graphic.
+- **Priority badge**: Capsule shape, 30pt tall, background/border applied to the `Menu` view itself (not inside the label) to avoid macOS borderless-button label stripping. Height forced via `.frame(height: 20)` on the Menu.
+- **Action icons** (description + delete): Always visible at `AppColors.inkMuted`; per-button `onHover` state darkens each independently. Description goes `AppColors.ink` on hover or when drawer is open. Delete goes `AppColors.high` (red) on hover.
+- **Delete confirmation**: Clicking trash sets `showDeleteConfirm = true`; an `.alert` asks for confirmation before `store.deleteTask` is called.
 
 ## Design System
 
@@ -98,7 +123,7 @@ A transparent backdrop (`Color.clear.contentShape(Rectangle())`) is applied to t
 - Fonts: `Instrument Serif` for display/titles, `JetBrains Mono` for UI labels/data.
 - `hardShadow(x:y:)` — paints an offset `AppColors.ink` rectangle behind a view (no blur).
 - `eyebrow()` — mono 10pt, kerning 2, uppercase, inkMuted.
-- `pill(color:)` — small mono label with colored background + border.
+- `pill(color:)` — small mono label with colored background + border (used in non-Menu contexts).
 
 ## ViewToggle (Day/Week/Month/Stats segmented control)
 
@@ -118,5 +143,5 @@ In Stats mode the header swaps to `statsModeControl` (`← DAY | STATS`) with th
 - Date keys throughout are plain `String` — never pass `Date` across view boundaries.
 - `buildDayTabs()` returns 8 keys: offsets `-4…+3` from today.
 - Streak counts consecutive fully-completed days ending yesterday (today excluded by design).
-- Column widths in SheetView: checkbox 44, priority 100, category 130, actions 72, name fills remainder.
 - All padding inside `.frame()` calls, not after, to keep declared widths accurate.
+- SwiftData is **not used** — the `@Model` macro requires full Xcode.app and is incompatible with Command Line Tools only builds.

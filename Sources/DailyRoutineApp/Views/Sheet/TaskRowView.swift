@@ -8,33 +8,23 @@ struct TaskRowView: View {
     @State private var isHovered = false
     @State private var editingName = false
     @State private var nameText: String = ""
+    @State private var descHovered = false
+    @State private var deleteHovered = false
+    @State private var showDeleteConfirm = false
 
     var body: some View {
         HStack(spacing: 0) {
-            // Checkbox
             checkboxCell
-
             divider
-
-            // Task name
             nameCell
                 .frame(maxWidth: .infinity, alignment: .leading)
-
             divider
-
-            // Priority
             priorityCell
                 .frame(width: 100, alignment: .center)
-
             divider
-
-            // Category
             categoryCell
                 .frame(width: 130, alignment: .leading)
-
             divider
-
-            // Actions
             actionCell
                 .frame(width: 72)
         }
@@ -44,6 +34,15 @@ struct TaskRowView: View {
                 (isHovered ? AppColors.borderWeak : AppColors.surface)
         )
         .onHover { isHovered = $0 }
+        .alert("Delete Task?", isPresented: $showDeleteConfirm) {
+            Button("Delete", role: .destructive) {
+                store.deleteTask(task.id, from: dayKey)
+                if store.drawerTaskId == task.id { store.drawerTaskId = nil }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("\"\(task.name.isEmpty ? "Untitled Task" : task.name)\" will be permanently removed.")
+        }
     }
 
     // MARK: - Cells
@@ -69,6 +68,7 @@ struct TaskRowView: View {
         }
         .buttonStyle(.plain)
         .frame(width: 44)
+        .contentShape(Rectangle())
     }
 
     private var nameCell: some View {
@@ -108,10 +108,22 @@ struct TaskRowView: View {
             }
         } label: {
             Text(task.priority.label)
-                .pill(color: task.priority.color)
+                .font(AppFonts.monoBold(10))
+                .kerning(0.8)
+                .foregroundColor(.white)
+                .padding(.horizontal, 20)
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
+        .frame(height: 20)
+        .background(
+            Capsule()
+                .fill(task.priority.color)
+        )
+        .overlay(
+            Capsule()
+                .stroke(task.priority.color.opacity(0.4), lineWidth: 1)
+        )
     }
 
     private var categoryCell: some View {
@@ -150,31 +162,35 @@ struct TaskRowView: View {
 
     private var actionCell: some View {
         HStack(spacing: 8) {
-            // Open drawer
             Button {
                 store.drawerTaskId = task.id == store.drawerTaskId ? nil : task.id
             } label: {
                 Image(systemName: "doc.text")
                     .font(.system(size: 13))
-                    .foregroundColor(store.drawerTaskId == task.id ? AppColors.ink : AppColors.inkFaint)
+                    .foregroundColor(
+                        store.drawerTaskId == task.id || descHovered
+                            ? AppColors.ink
+                            : AppColors.inkMuted
+                    )
             }
             .buttonStyle(.plain)
+            .contentShape(Rectangle())
+            .onHover { descHovered = $0 }
             .help("Edit description")
 
-            // Delete
             Button {
-                store.deleteTask(task.id, from: dayKey)
-                if store.drawerTaskId == task.id { store.drawerTaskId = nil }
+                showDeleteConfirm = true
             } label: {
                 Image(systemName: "trash")
                     .font(.system(size: 12))
-                    .foregroundColor(isHovered ? AppColors.high : AppColors.inkFaint)
+                    .foregroundColor(deleteHovered ? AppColors.high : AppColors.inkMuted)
             }
             .buttonStyle(.plain)
+            .contentShape(Rectangle())
+            .onHover { deleteHovered = $0 }
             .help("Delete task")
         }
         .padding(.horizontal, 12)
-        .opacity(isHovered || store.drawerTaskId == task.id ? 1 : 0.3)
     }
 
     private var divider: some View {
