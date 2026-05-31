@@ -81,13 +81,21 @@ struct PillStyle: ViewModifier {
     var color: Color
     func body(content: Content) -> some View {
         content
-            .font(AppFonts.mono(9))
-            .foregroundColor(color)
-            .padding(.horizontal, 7)
-            .padding(.vertical, 2)
-            .background(color.opacity(0.08))
-            .overlay(RoundedRectangle(cornerRadius: 99).stroke(color.opacity(0.25), lineWidth: 1))
-            .clipShape(Capsule())
+            .font(AppFonts.monoBold(10))
+            .kerning(0.8)
+            .foregroundColor(.white)
+            .lineLimit(1)
+            .fixedSize()
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(color)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .stroke(color.opacity(0.4), lineWidth: 1)
+            )
     }
 }
 

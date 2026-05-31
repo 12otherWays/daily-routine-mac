@@ -88,7 +88,7 @@ func headerTitle(for key: String, viewMode: ViewMode) -> String {
     switch viewMode {
     case .day:
         let f = DateFormatter()
-        f.dateFormat = "EEEE, MMMM d"
+        f.dateFormat = "EEEE, MMM d, yyyy"
         return f.string(from: d)
     case .week:
         let days = getWeekDays(for: key)

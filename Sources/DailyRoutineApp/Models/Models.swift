@@ -101,6 +101,28 @@ enum ViewMode: String, CaseIterable, Hashable {
     }
 }
 
+// MARK: - Persisted App Data
+
+struct AppData: Codable {
+    var days: [String: [RoutineTask]]
+    var templates: [RoutineTemplate]
+    var categories: [String]
+
+    static var defaultSeed: AppData {
+        AppData(
+            days: [:],
+            templates: [
+                RoutineTemplate(name: "Morning workout", description: "30 min cardio or strength", priority: .high, category: "Health"),
+                RoutineTemplate(name: "Read", description: "At least 20 pages", priority: .med, category: "Learning"),
+                RoutineTemplate(name: "Journal", description: "Write 3 things you're grateful for", priority: .low, category: "Mindfulness"),
+            ],
+            categories: ["Health", "Work", "Learning", "Mindfulness", "Personal"]
+        )
+    }
+}
+
+// MARK: - View State Enums
+
 enum SettingsTab: String, CaseIterable, Identifiable, Hashable {
     case templates, categories
 

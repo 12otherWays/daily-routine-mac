@@ -1,5 +1,4 @@
 import Foundation
-import SwiftData
 import SwiftUI
 
 private let PREFS_KEY = "routine:prefs"
@@ -55,7 +54,6 @@ final class AppStore: ObservableObject {
 
     /// Runs migration (first launch only) and warms the small in-memory caches.
     func bootstrap() {
-        StoreMigration.runIfNeeded(repository: repository)
         templates  = repository.templates()
         categories = repository.categories()
         loadPrefs()

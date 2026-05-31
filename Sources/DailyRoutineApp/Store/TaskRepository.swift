@@ -1,8 +1,5 @@
 import Foundation
-import SwiftData
 
-// Lightweight record used by stats aggregation — avoids materialising full TaskEntity rows
-// when we only need a handful of properties across the full table.
 struct TaskRecord: Hashable {
     let dayKey: String
     let done: Bool
@@ -43,200 +40,137 @@ protocol TaskRepository {
 }
 
 @MainActor
-final class SwiftDataTaskRepository: TaskRepository {
+final class UserDefaultsTaskRepository: TaskRepository {
 
-    private let context: ModelContext
+    private static let dataKey = "routine:v2"
 
-    init(context: ModelContext) {
-        self.context = context
+    private var data: AppData
+
+    init() {
+        if let blob = UserDefaults.standard.data(forKey: Self.dataKey),
+           let decoded = try? JSONDecoder().decode(AppData.self, from: blob) {
+            data = decoded
+        } else {
+            data = AppData.defaultSeed
+        }
     }
 
     // MARK: - Task reads
 
     func tasks(forDay day: String) -> [RoutineTask] {
-        let descriptor = FetchDescriptor<TaskEntity>(
-            predicate: #Predicate { $0.dayKey == day },
-            sortBy: [SortDescriptor(\.sortIndex), SortDescriptor(\.createdAt)]
-        )
-        return ((try? context.fetch(descriptor)) ?? []).map { $0.toDTO() }
+        data.days[day] ?? []
     }
 
     func tasks(forDays days: [String]) -> [String: [RoutineTask]] {
-        guard !days.isEmpty else { return [:] }
-        let set = Set(days)
-        let descriptor = FetchDescriptor<TaskEntity>(
-            predicate: #Predicate { set.contains($0.dayKey) },
-            sortBy: [SortDescriptor(\.sortIndex), SortDescriptor(\.createdAt)]
-        )
-        let fetched = (try? context.fetch(descriptor)) ?? []
         var result: [String: [RoutineTask]] = [:]
-        result.reserveCapacity(days.count)
-        for day in days { result[day] = [] }
-        for entity in fetched {
-            result[entity.dayKey, default: []].append(entity.toDTO())
-        }
+        for day in days { result[day] = data.days[day] ?? [] }
         return result
     }
 
     func tasks(fromDay start: String, toDay end: String) -> [String: [RoutineTask]] {
-        let descriptor = FetchDescriptor<TaskEntity>(
-            predicate: #Predicate { $0.dayKey >= start && $0.dayKey <= end },
-            sortBy: [SortDescriptor(\.dayKey), SortDescriptor(\.sortIndex)]
-        )
-        let fetched = (try? context.fetch(descriptor)) ?? []
         var result: [String: [RoutineTask]] = [:]
-        for entity in fetched {
-            result[entity.dayKey, default: []].append(entity.toDTO())
+        for (day, tasks) in data.days where day >= start && day <= end {
+            result[day] = tasks
         }
         return result
     }
 
     func taskCount(forDay day: String) -> Int {
-        let descriptor = FetchDescriptor<TaskEntity>(predicate: #Predicate { $0.dayKey == day })
-        return (try? context.fetchCount(descriptor)) ?? 0
+        data.days[day]?.count ?? 0
     }
 
     func taskCounts(forDays days: [String]) -> [String: (done: Int, total: Int)] {
-        guard !days.isEmpty else { return [:] }
-        let set = Set(days)
-        var descriptor = FetchDescriptor<TaskEntity>(
-            predicate: #Predicate { set.contains($0.dayKey) }
-        )
-        descriptor.propertiesToFetch = [\.dayKey, \.done]
-        let fetched = (try? context.fetch(descriptor)) ?? []
         var counts: [String: (done: Int, total: Int)] = [:]
-        for day in days { counts[day] = (0, 0) }
-        for entity in fetched {
-            let prev = counts[entity.dayKey] ?? (0, 0)
-            counts[entity.dayKey] = (prev.done + (entity.done ? 1 : 0), prev.total + 1)
+        for day in days {
+            let list = data.days[day] ?? []
+            counts[day] = (list.filter(\.done).count, list.count)
         }
         return counts
     }
 
     func allDayKeysWithTasks() -> Set<String> {
-        var descriptor = FetchDescriptor<TaskEntity>()
-        descriptor.propertiesToFetch = [\.dayKey]
-        let fetched = (try? context.fetch(descriptor)) ?? []
-        return Set(fetched.map(\.dayKey))
+        Set(data.days.keys.filter { !(data.days[$0]?.isEmpty ?? true) })
     }
 
     func allRecords() -> [TaskRecord] {
-        var descriptor = FetchDescriptor<TaskEntity>(
-            sortBy: [SortDescriptor(\.dayKey)]
-        )
-        descriptor.propertiesToFetch = [\.dayKey, \.done, \.category]
-        let fetched = (try? context.fetch(descriptor)) ?? []
-        return fetched.map { TaskRecord(dayKey: $0.dayKey, done: $0.done, category: $0.category) }
+        data.days.keys.sorted().flatMap { day in
+            (data.days[day] ?? []).map { TaskRecord(dayKey: day, done: $0.done, category: $0.category) }
+        }
     }
 
     // MARK: - Task writes
 
     func insertTask(_ task: RoutineTask, day: String) throws {
-        let nextIndex = (try? context.fetchCount(
-            FetchDescriptor<TaskEntity>(predicate: #Predicate { $0.dayKey == day })
-        )) ?? 0
-        let entity = TaskEntity.make(from: task, dayKey: day, sortIndex: nextIndex)
-        context.insert(entity)
+        data.days[day, default: []].append(task)
     }
 
     func updateTask(_ task: RoutineTask) throws {
-        guard let entity = try fetchTask(id: task.id) else { return }
-        entity.apply(task)
-    }
-
-    func deleteTask(id: String) throws {
-        guard let entity = try fetchTask(id: id) else { return }
-        context.delete(entity)
-    }
-
-    func toggleDone(id: String) throws {
-        guard let entity = try fetchTask(id: id) else { return }
-        entity.done.toggle()
-    }
-
-    func reorderTasks(day: String, fromOffsets: IndexSet, to destination: Int) throws {
-        let descriptor = FetchDescriptor<TaskEntity>(
-            predicate: #Predicate { $0.dayKey == day },
-            sortBy: [SortDescriptor(\.sortIndex), SortDescriptor(\.createdAt)]
-        )
-        var entities = (try? context.fetch(descriptor)) ?? []
-        entities.move(fromOffsets: fromOffsets, toOffset: destination)
-        for (i, entity) in entities.enumerated() {
-            entity.sortIndex = i
+        for day in data.days.keys {
+            guard let idx = data.days[day]?.firstIndex(where: { $0.id == task.id }) else { continue }
+            data.days[day]![idx] = task
+            return
         }
     }
 
-    private func fetchTask(id: String) throws -> TaskEntity? {
-        // Explicit local binding + typed predicate avoids a SwiftData macro
-        // quirk where captured String params occasionally fail to match
-        // freshly-inserted (pending) entities.
-        let target = id
-        var descriptor = FetchDescriptor<TaskEntity>(
-            predicate: #Predicate<TaskEntity> { $0.id == target }
-        )
-        descriptor.fetchLimit = 1
-        return try context.fetch(descriptor).first
+    func deleteTask(id: String) throws {
+        for day in data.days.keys {
+            guard data.days[day]?.contains(where: { $0.id == id }) == true else { continue }
+            data.days[day]!.removeAll { $0.id == id }
+            return
+        }
+    }
+
+    func toggleDone(id: String) throws {
+        for day in data.days.keys {
+            guard let idx = data.days[day]?.firstIndex(where: { $0.id == id }) else { continue }
+            data.days[day]![idx].done.toggle()
+            return
+        }
+    }
+
+    func reorderTasks(day: String, fromOffsets: IndexSet, to destination: Int) throws {
+        data.days[day]?.move(fromOffsets: fromOffsets, toOffset: destination)
     }
 
     // MARK: - Templates
 
     func templates() -> [RoutineTemplate] {
-        let descriptor = FetchDescriptor<TemplateEntity>(
-            sortBy: [SortDescriptor(\.sortIndex), SortDescriptor(\.createdAt)]
-        )
-        return ((try? context.fetch(descriptor)) ?? []).map { $0.toDTO() }
+        data.templates
     }
 
     func insertTemplate(_ template: RoutineTemplate) throws {
-        let nextIndex = (try? context.fetchCount(FetchDescriptor<TemplateEntity>())) ?? 0
-        context.insert(TemplateEntity.make(from: template, sortIndex: nextIndex))
+        data.templates.append(template)
     }
 
     func updateTemplate(_ template: RoutineTemplate) throws {
-        let id = template.id
-        var descriptor = FetchDescriptor<TemplateEntity>(predicate: #Predicate { $0.id == id })
-        descriptor.fetchLimit = 1
-        guard let entity = try context.fetch(descriptor).first else { return }
-        entity.apply(template)
+        guard let idx = data.templates.firstIndex(where: { $0.id == template.id }) else { return }
+        data.templates[idx] = template
     }
 
     func deleteTemplate(id: String) throws {
-        var descriptor = FetchDescriptor<TemplateEntity>(predicate: #Predicate { $0.id == id })
-        descriptor.fetchLimit = 1
-        guard let entity = try context.fetch(descriptor).first else { return }
-        context.delete(entity)
+        data.templates.removeAll { $0.id == id }
     }
 
     // MARK: - Categories
 
     func categories() -> [String] {
-        let descriptor = FetchDescriptor<CategoryEntity>(
-            sortBy: [SortDescriptor(\.sortIndex), SortDescriptor(\.createdAt)]
-        )
-        return ((try? context.fetch(descriptor)) ?? []).map(\.name)
+        data.categories
     }
 
     func addCategory(_ name: String) throws {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return }
-        var existing = FetchDescriptor<CategoryEntity>(predicate: #Predicate { $0.name == trimmed })
-        existing.fetchLimit = 1
-        if (try context.fetch(existing).first) != nil { return }
-        let nextIndex = (try? context.fetchCount(FetchDescriptor<CategoryEntity>())) ?? 0
-        context.insert(CategoryEntity(name: trimmed, sortIndex: nextIndex))
+        guard !trimmed.isEmpty, !data.categories.contains(trimmed) else { return }
+        data.categories.append(trimmed)
     }
 
     func deleteCategory(_ name: String) throws {
-        var descriptor = FetchDescriptor<CategoryEntity>(predicate: #Predicate { $0.name == name })
-        descriptor.fetchLimit = 1
-        guard let entity = try context.fetch(descriptor).first else { return }
-        context.delete(entity)
+        data.categories.removeAll { $0 == name }
     }
 
     // MARK: - Persistence
 
     func save() throws {
-        guard context.hasChanges else { return }
-        try context.save()
+        let encoded = try JSONEncoder().encode(data)
+        UserDefaults.standard.set(encoded, forKey: Self.dataKey)
     }
 }

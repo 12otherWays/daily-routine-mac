@@ -10,17 +10,18 @@ struct HeaderView: View {
     private var isToday: Bool { store.activeDay == todayKey() }
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 24) {
-            // Left: title + eyebrow
+        HStack(alignment: .bottom, spacing: 16) {
+            // Left: title + eyebrow — priority 1 so it always wins for space.
             VStack(alignment: .leading, spacing: 8) {
                 eyebrowRow
                 titleText
             }
+            .layoutPriority(1)
 
-            Spacer()
+            Spacer(minLength: 12)
 
             // Right: stats/controls + gear
-            HStack(alignment: .bottom, spacing: 16) {
+            HStack(alignment: .bottom, spacing: 12) {
                 if store.viewMode == .stats {
                     statsModeControl
                 } else {
@@ -64,9 +65,10 @@ struct HeaderView: View {
 
     private var titleText: some View {
         Text(headerTitle(for: store.activeDay, viewMode: store.viewMode))
-            .font(AppFonts.displayItalic(26))
+            .font(AppFonts.displayItalic(28))
             .foregroundColor(AppColors.ink)
             .lineLimit(1)
+            .minimumScaleFactor(0.6)
     }
 
     @State private var backHovered = false
@@ -112,7 +114,7 @@ struct HeaderView: View {
 
     // Stats + ViewToggle
     private var normalControls: some View {
-        HStack(alignment: .bottom, spacing: 24) {
+        HStack(alignment: .bottom, spacing: 16) {
             statItem(label: store.viewMode == .day ? "Done" : "Total done",
                      value: "\(done)/\(total)")
             statItem(label: "Progress", value: "\(pct)%")
