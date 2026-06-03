@@ -12,6 +12,13 @@ struct TaskRowView: View {
     @State private var deleteHovered = false
     @State private var showDeleteConfirm = false
 
+    // Read done state live from store so this view re-renders with fresh data
+    // even when SwiftUI independently re-renders it before the parent passes
+    // the updated `task` prop.
+    private var isDone: Bool {
+        store.tasks(for: dayKey).first(where: { $0.id == task.id })?.done ?? task.done
+    }
+
     var body: some View {
         HStack(spacing: 0) {
             checkboxCell
@@ -30,7 +37,7 @@ struct TaskRowView: View {
         }
         .frame(height: 48)
         .background(
-            task.done ? AppColors.bg.opacity(0.6) :
+            isDone ? AppColors.bg.opacity(0.6) :
                 (isHovered ? AppColors.borderWeak : AppColors.surface)
         )
         .onHover { isHovered = $0 }
@@ -48,27 +55,27 @@ struct TaskRowView: View {
     // MARK: - Cells
 
     private var checkboxCell: some View {
-        Button {
-            store.toggleDone(task.id, for: dayKey)
-        } label: {
-            ZStack {
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(task.done ? AppColors.ink : Color.clear)
-                    .frame(width: 20, height: 20)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 4)
-                            .stroke(task.done ? AppColors.ink : AppColors.borderStrong, lineWidth: 1.5)
-                    )
-                if task.done {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundColor(AppColors.bg)
-                }
+        ZStack {
+            Color.white.opacity(0.001) // non-transparent so macOS hit-tests the full cell
+            RoundedRectangle(cornerRadius: 4)
+                .fill(isDone ? AppColors.ink : Color.clear)
+                .frame(width: 20, height: 20)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 4)
+                        .stroke(isDone ? AppColors.ink : AppColors.borderStrong, lineWidth: 1.5)
+                )
+            if isDone {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(AppColors.bg)
             }
         }
-        .buttonStyle(.plain)
         .frame(width: 44)
+        .frame(maxHeight: .infinity)
         .contentShape(Rectangle())
+        .onTapGesture {
+            store.toggleDone(task.id, for: dayKey)
+        }
     }
 
     private var nameCell: some View {
@@ -84,8 +91,8 @@ struct TaskRowView: View {
             } else {
                 Text(task.name.isEmpty ? "Untitled Task" : task.name)
                     .font(AppFonts.mono(13))
-                    .foregroundColor(task.name.isEmpty ? AppColors.inkFaint : (task.done ? AppColors.inkMuted : AppColors.ink))
-                    .strikethrough(task.done, color: AppColors.inkMuted)
+                    .foregroundColor(task.name.isEmpty ? AppColors.inkFaint : (isDone ? AppColors.inkMuted : AppColors.ink))
+                    .strikethrough(isDone, color: AppColors.inkMuted)
                     .padding(.horizontal, 12)
                     .onTapGesture(count: 2) {
                         nameText = task.name

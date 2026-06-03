@@ -111,14 +111,15 @@ struct ContentView: View {
     }
 
     private var progressBar: some View {
-        ZStack(alignment: .leading) {
-            Rectangle()
-                .fill(AppColors.borderWeak)
-                .frame(height: 2)
-            Rectangle()
-                .fill(AppColors.ink)
-                .frame(width: CGFloat(pct) / 100.0 * (NSScreen.main?.frame.width ?? 1000), height: 2)
-                .animation(.easeInOut(duration: 0.4), value: pct)
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Rectangle()
+                    .fill(AppColors.borderWeak)
+                Rectangle()
+                    .fill(AppColors.ink)
+                    .frame(width: CGFloat(pct) / 100.0 * geo.size.width)
+                    .animation(.easeInOut(duration: 0.4), value: pct)
+            }
         }
         .frame(height: 2)
     }
