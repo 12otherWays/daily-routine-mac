@@ -116,22 +116,20 @@ struct TaskRowView: View {
         } label: {
             Text(task.priority.label)
                 .font(AppFonts.monoBold(10))
-                .kerning(0.8)
+                .kerning(1)
                 .foregroundColor(.white)
-                .padding(.horizontal, 10)
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
-        .frame(height: 20)
+        .padding(.horizontal, 14)
+        .frame(minWidth: 60, minHeight: 26)
         .background(
-            RoundedRectangle(cornerRadius: 4)
+            RoundedRectangle(cornerRadius: 6)
                 .fill(task.priority.color)
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: 4)
-                .stroke(AppColors.ink, lineWidth: 1)
-        )
+        .contentShape(RoundedRectangle(cornerRadius: 6))
+        .opacity(isDone ? 0.55 : 1)
     }
 
     private var categoryCell: some View {
@@ -155,22 +153,22 @@ struct TaskRowView: View {
             Text(task.category.isEmpty ? "—" : task.category)
                 .font(AppFonts.mono(10))
                 .kerning(0.5)
-                .foregroundColor(task.category.isEmpty ? AppColors.inkFaint : AppColors.ink)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
+                .foregroundColor(task.category.isEmpty ? AppColors.inkFaint : (isDone ? AppColors.inkMuted : AppColors.ink))
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .fixedSize()
+        .padding(.horizontal, 14)
+        .frame(minWidth: 60, minHeight: 26)
         .background(
-            RoundedRectangle(cornerRadius: 4)
-                .fill(task.category.isEmpty ? Color.clear : AppColors.bg)
+            RoundedRectangle(cornerRadius: 6)
+                .fill(AppColors.surface)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 4)
-                .stroke(task.category.isEmpty ? Color.clear : AppColors.borderStrong, lineWidth: 1)
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(task.category.isEmpty ? AppColors.borderMid : AppColors.borderStrong, lineWidth: 1)
         )
-        .padding(.horizontal, 8)
+        .opacity(isDone ? 0.55 : 1)
     }
 
     private var actionCell: some View {

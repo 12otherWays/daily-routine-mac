@@ -19,12 +19,12 @@ Sources/DailyRoutineApp/
 ├── DailyRoutineApp.swift          # @main entry, WindowGroup, keyboard shortcuts
 ├── ContentView.swift              # Root layout: header + content + nav bar + overlays
 ├── Models/
-│   ├── Models.swift               # RoutineTask, RoutineTemplate, AppData, Prefs, ViewMode, SettingsTab
+│   ├── Models.swift               # RoutineTask, TemplateTask, RoutineTemplate, AppData, Prefs, ViewMode, SettingsTab
 │   └── Entities.swift             # stub (SwiftData removed)
 ├── Store/
 │   ├── AppStore.swift             # @MainActor ObservableObject; all state + navigation + cache
-│   ├── TaskRepository.swift       # TaskRepository protocol + UserDefaultsTaskRepository
-│   └── StoreMigration.swift       # stub (migration removed)
+│   ├── TaskRepository.swift       # TaskRepository protocol + UserDefaultsTaskRepository + v1→v2 migration
+│   └── StoreMigration.swift       # stub (SwiftData migration removed)
 ├── Styles/
 │   └── AppStyles.swift            # AppColors, AppFonts, EyebrowStyle, PillStyle, hardShadow modifier
 ├── Utils/
@@ -45,10 +45,10 @@ Sources/DailyRoutineApp/
     │   └── StatCard.swift         # Individual stat card component
     ├── Settings/
     │   ├── SettingsView.swift     # Slide-in settings panel (templates + categories tabs)
-    │   ├── TemplatesEditor.swift  # CRUD for RoutineTemplate list
+    │   ├── TemplatesEditor.swift  # CRUD for RoutineTemplate groups; accordion rows with inline add-task form
     │   └── CategoriesEditor.swift # CRUD for category string list
     ├── TemplatePicker/
-    │   └── TemplatePickerView.swift # Sheet: pick a template to add to the active day
+    │   └── TemplatePickerView.swift # Sheet: pick a template (adds all its tasks); save today's tasks as template
     └── Onboarding/
         └── OnboardingView.swift   # First-launch onboarding sheet
 ```
@@ -56,22 +56,24 @@ Sources/DailyRoutineApp/
 ## Data Model
 
 ```swift
-RoutineTask   { id, name, description, priority(high/med/low), category, done }
-RoutineTemplate { id, name, description, priority, category }   // no `done`
-AppData       { days: [String: [RoutineTask]], templates: [RoutineTemplate], categories: [String] }
-Prefs         { onboarded: Bool }
+RoutineTask     { id, name, description, priority(high/med/low), category, done }
+TemplateTask    { id, name, description, priority, category }   // task inside a template group; has toTask()
+RoutineTemplate { id, name, tasks: [TemplateTask] }             // named group of tasks
+AppData         { days: [String: [RoutineTask]], templates: [RoutineTemplate], categories: [String] }
+Prefs           { onboarded: Bool }
 ```
 
 - Day keys are `yyyy-MM-dd` strings (ISO, en_US_POSIX locale).
 - `AppData` is persisted as a single JSON blob to `UserDefaults` under key `routine:v2`.
 - `Prefs` is persisted to `UserDefaults` under key `routine:prefs`.
 - All saves are debounced 250ms via `DispatchWorkItem` (text edits) or immediate (structural mutations).
+- **v1 → v2 migration**: old flat `RoutineTemplate { id, name, description, priority, category }` records are auto-migrated on first load by `UserDefaultsTaskRepository.init()` — each becomes a `RoutineTemplate` group containing one `TemplateTask`. Migrated data is immediately resaved.
 
 ## Persistence Layer
 
 All data access goes through the `TaskRepository` protocol (`TaskRepository.swift`). The concrete implementation is `UserDefaultsTaskRepository`, which:
 
-- Loads `AppData` from `UserDefaults` on init; seeds `AppData.defaultSeed` on fresh install.
+- Loads `AppData` from `UserDefaults` on init; tries new format first, falls back to v1 migration, then seeds `AppData.defaultSeed` on fresh install.
 - Operates on the full dataset in memory.
 - Flushes to `UserDefaults` on every `save()` call.
 
@@ -111,7 +113,7 @@ When any drawer is open (`anyDrawerOpen`), a `Color.black.opacity(0.12)` overlay
 Column widths: checkbox 44, priority 100, category 130, actions 72, name fills remainder.
 
 - **Checkbox**: `.buttonStyle(.plain)` + `.contentShape(Rectangle())` ensures the full 44pt column is tappable, not just the 20×20 graphic.
-- **Priority badge**: Capsule shape, 30pt tall, background/border applied to the `Menu` view itself (not inside the label) to avoid macOS borderless-button label stripping. Height forced via `.frame(height: 20)` on the Menu.
+- **Priority badge**: Rounded rect (cornerRadius 4), background/border applied to the `Menu` view itself (not inside the label) to avoid macOS borderless-button label stripping. Height forced via `.frame(height: 20)`. `.menuIndicator(.hidden)` suppresses the macOS dropdown chevron on both priority and category menus.
 - **Action icons** (description + delete): Always visible at `AppColors.inkMuted`; per-button `onHover` state darkens each independently. Description goes `AppColors.ink` on hover or when drawer is open. Delete goes `AppColors.high` (red) on hover.
 - **Delete confirmation**: Clicking trash sets `showDeleteConfirm = true`; an `.alert` asks for confirmation before `store.deleteTask` is called.
 
@@ -136,6 +138,14 @@ In Stats mode the header swaps to `statsModeControl` (`← DAY | STATS`) with th
 - `minWidth: 900, idealWidth: 1100, minHeight: 660, idealHeight: 820`
 - `.windowStyle(.titleBar)` + `.windowToolbarStyle(.unified(showsTitle: false))`
 - Keyboard shortcuts: `⌘←` prev, `⌘→` next, `⌘T` go to today
+
+## Template System
+
+Templates are named groups of tasks. Applying a template inserts all of its tasks into the active day at once.
+
+- **`TemplatesEditor`** (Settings → Templates tab): create a group by name, then expand it to add tasks inline (name + priority + category). Delete individual tasks with ✕ or the whole group with trash.
+- **`TemplatePickerView`**: card grid — each card shows template name, task-count badge, and a bullet preview of up to 3 tasks. Clicking a card calls `store.addTasksFromTemplate(_:to:)` and dismisses. Footer shows a "Save today's N tasks as template" button that reveals an inline name field calling `store.saveCurrentDayAsTemplate(name:)`.
+- **`AppStore` methods**: `addTasksFromTemplate(_:to:)` loops over `template.tasks` and inserts each; `saveCurrentDayAsTemplate(name:)` snapshots the active day's tasks into a new `RoutineTemplate`.
 
 ## Key Conventions
 

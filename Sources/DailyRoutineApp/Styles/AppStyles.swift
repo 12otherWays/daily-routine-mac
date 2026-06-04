@@ -10,9 +10,9 @@ enum AppColors {
     static let inkFaint    = Color(hex: "94a3b8")
     static let accent      = Color(hex: "0891b2")
     static let accentBg    = Color(hex: "e0f2fe")
-    static let high        = Color(hex: "dc2626")
-    static let med         = Color(hex: "d97706")
-    static let low         = Color(hex: "0891b2")
+    static let high        = Color(hex: "dc2626")   // red
+    static let med         = Color(hex: "ca8a04")   // yellow
+    static let low         = Color(hex: "16a34a")   // green
     static let borderWeak  = Color(hex: "0f172a").opacity(0.08)
     static let borderMid   = Color(hex: "0f172a").opacity(0.12)
     static let borderStrong = Color(hex: "0f172a").opacity(0.20)
