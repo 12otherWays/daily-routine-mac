@@ -30,7 +30,7 @@ struct TaskRowView: View {
                 .frame(width: 100, alignment: .center)
             divider
             categoryCell
-                .frame(width: 130, alignment: .leading)
+                .frame(width: 130, alignment: .center)
             divider
             actionCell
                 .frame(width: 72)
