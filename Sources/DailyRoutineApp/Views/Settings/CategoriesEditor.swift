@@ -13,13 +13,12 @@ struct CategoriesEditor: View {
 
                 HStack(spacing: 10) {
                     TextField("Category name", text: $newCategory)
-                        .textFieldStyle(.roundedBorder)
                         .font(AppFonts.mono(13))
+                        .appField()
                         .onSubmit { addCategory() }
 
                     Button("Add") { addCategory() }
-                        .buttonStyle(.borderedProminent)
-                        .font(AppFonts.monoBold(11))
+                        .buttonStyle(AppPrimaryButtonStyle())
                         .disabled(newCategory.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }

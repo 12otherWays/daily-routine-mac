@@ -14,6 +14,7 @@ struct WeekView: View {
                 }
             }
         }
+        .frame(minHeight: 360, alignment: .top)
         .background(AppColors.surface)
         .overlay(RoundedRectangle(cornerRadius: 0).stroke(AppColors.ink, lineWidth: 1))
         .hardShadow()
@@ -42,7 +43,7 @@ private struct WeekDayColumn: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Day header
+            // Day header — fixed height so every column's header aligns.
             VStack(spacing: 2) {
                 Text(weekdayLabel)
                     .font(AppFonts.mono(9)).kerning(1)
@@ -50,14 +51,14 @@ private struct WeekDayColumn: View {
                 Text(dayNum)
                     .font(AppFonts.monoBold(18))
                     .foregroundColor(isToday ? AppColors.accent : AppColors.ink)
-                if !tasks.isEmpty {
-                    Text("\(done)/\(tasks.count)")
-                        .font(AppFonts.mono(9))
-                        .foregroundColor(AppColors.inkMuted)
-                }
+                // Always rendered to keep header height constant; hidden when empty.
+                Text("\(done)/\(tasks.count)")
+                    .font(AppFonts.mono(9))
+                    .foregroundColor(AppColors.inkMuted)
+                    .opacity(tasks.isEmpty ? 0 : 1)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
+            .frame(height: 68)
             .background(isToday ? AppColors.accentBg : AppColors.bg)
             .overlay(alignment: .bottom) {
                 Rectangle().fill(AppColors.borderWeak).frame(height: 1)
@@ -65,26 +66,25 @@ private struct WeekDayColumn: View {
 
             // Tasks
             if tasks.isEmpty {
-                VStack {
-                    Button {
-                        store.activeDay = dayKey
-                        store.addBlankTask(to: dayKey)
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.system(size: 12))
-                            .foregroundColor(AppColors.inkFaint)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Add task")
+                Button {
+                    store.activeDay = dayKey
+                    store.addBlankTask(to: dayKey)
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 12))
+                        .foregroundColor(AppColors.inkFaint)
                 }
+                .buttonStyle(.plain)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(.vertical, 16)
+                .help("Add task")
             } else {
                 VStack(spacing: 0) {
                     ForEach(tasks) { task in
                         WeekTaskRow(task: task, dayKey: dayKey)
                         Rectangle().fill(AppColors.borderWeak).frame(height: 1)
                     }
+                    Spacer(minLength: 0)
                     Button {
                         store.activeDay = dayKey
                         store.viewMode = .day
@@ -98,9 +98,11 @@ private struct WeekDayColumn: View {
                     .padding(8)
                     .help("Open day view")
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .contentShape(Rectangle())
         .onTapGesture {
             store.activeDay = dayKey
             store.viewMode = .day

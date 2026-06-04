@@ -99,9 +99,51 @@ struct PillStyle: ViewModifier {
     }
 }
 
+// Neo-brutalist text field: white fill, ink border, generous height.
+// Height comes from vertical padding (not a fixed frame) so the AppKit
+// field editor sizes naturally and typed text stays visible.
+struct AppFieldStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .textFieldStyle(.plain)
+            .foregroundColor(AppColors.ink)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(AppColors.surface)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(AppColors.borderStrong, lineWidth: 1)
+            )
+    }
+}
+
+// Primary action button sized to match `.appField()` (same 12pt vertical
+// padding → same height), so a button sitting next to a field lines up flush.
+struct AppPrimaryButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(AppFonts.monoBold(11))
+            .kerning(1)
+            .foregroundColor(.white)
+            .padding(.horizontal, 18)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isEnabled ? AppColors.accent : AppColors.inkFaint)
+            )
+            .opacity(configuration.isPressed ? 0.75 : 1)
+    }
+}
+
 extension View {
     func eyebrow() -> some View { modifier(EyebrowStyle()) }
     func pill(color: Color) -> some View { modifier(PillStyle(color: color)) }
+    func appField() -> some View { modifier(AppFieldStyle()) }
 
     // Hard offset shadow (neo-brutalist, no blur).
     // Uses an offset background rectangle instead of SwiftUI's .shadow(),

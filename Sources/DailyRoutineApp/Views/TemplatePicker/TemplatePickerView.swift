@@ -143,12 +143,11 @@ struct TemplatePickerView: View {
                 .eyebrow()
                 .frame(width: 110, alignment: .leading)
             TextField("e.g. \"My Daily Routine\"", text: $saveTemplateName)
-                .textFieldStyle(.roundedBorder)
                 .font(AppFonts.mono(12))
+                .appField()
                 .onSubmit { commitSave() }
             Button("Save") { commitSave() }
-                .buttonStyle(.borderedProminent)
-                .font(AppFonts.monoBold(10))
+                .buttonStyle(AppPrimaryButtonStyle())
                 .disabled(saveTemplateName.trimmingCharacters(in: .whitespaces).isEmpty)
         }
         .padding(.horizontal, 28)

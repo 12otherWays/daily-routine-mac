@@ -54,12 +54,11 @@ struct TemplatesEditor: View {
             Text("NEW TEMPLATE").eyebrow()
             HStack(spacing: 8) {
                 TextField("Template name, e.g. \"Morning Routine\"", text: $newTemplateName)
-                    .textFieldStyle(.roundedBorder)
                     .font(AppFonts.mono(13))
+                    .appField()
                     .onSubmit { createTemplate() }
                 Button("Create") { createTemplate() }
-                    .buttonStyle(.borderedProminent)
-                    .font(AppFonts.monoBold(11))
+                    .buttonStyle(AppPrimaryButtonStyle())
                     .disabled(newTemplateName.trimmingCharacters(in: .whitespaces).isEmpty)
             }
             Text("After creating, expand the template to add tasks.")
@@ -196,8 +195,8 @@ private struct TemplateGroupRow: View {
     private var addTaskForm: some View {
         VStack(alignment: .leading, spacing: 6) {
             TextField("Task name", text: $newName)
-                .textFieldStyle(.roundedBorder)
                 .font(AppFonts.mono(12))
+                .appField()
                 .onSubmit { commitAddTask() }
 
             HStack(spacing: 6) {
@@ -235,8 +234,7 @@ private struct TemplateGroupRow: View {
                 Spacer()
 
                 Button("Add task") { commitAddTask() }
-                    .buttonStyle(.borderedProminent)
-                    .font(AppFonts.monoBold(10))
+                    .buttonStyle(AppPrimaryButtonStyle())
                     .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }
