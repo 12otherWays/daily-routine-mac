@@ -158,10 +158,22 @@ final class AppStore: ObservableObject {
         invalidate(day: day)
     }
 
-    func addTaskFromTemplate(_ template: RoutineTemplate, to day: String) {
-        try? repository.insertTask(template.toTask(), day: day)
+    func addTasksFromTemplate(_ template: RoutineTemplate, to day: String) {
+        for task in template.tasks {
+            try? repository.insertTask(task.toTask(), day: day)
+        }
         try? repository.save()
         invalidate(day: day)
+    }
+
+    func saveCurrentDayAsTemplate(name: String) {
+        let templateTasks = tasks(for: activeDay).map {
+            TemplateTask(name: $0.name, description: $0.description, priority: $0.priority, category: $0.category)
+        }
+        let template = RoutineTemplate(name: name.trimmingCharacters(in: .whitespaces), tasks: templateTasks)
+        try? repository.insertTemplate(template)
+        templates = repository.templates()
+        scheduleSave()
     }
 
     func deleteTask(_ taskId: String, from day: String) {

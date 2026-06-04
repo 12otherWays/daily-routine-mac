@@ -47,11 +47,52 @@ final class UserDefaultsTaskRepository: TaskRepository {
     private var data: AppData
 
     init() {
-        if let blob = UserDefaults.standard.data(forKey: Self.dataKey),
-           let decoded = try? JSONDecoder().decode(AppData.self, from: blob) {
-            data = decoded
+        if let blob = UserDefaults.standard.data(forKey: Self.dataKey) {
+            if let decoded = try? JSONDecoder().decode(AppData.self, from: blob) {
+                data = decoded
+            } else if let legacy = try? JSONDecoder().decode(LegacyAppData.self, from: blob) {
+                // Migrate v1 flat templates (one task per template) to v2 grouped templates.
+                data = legacy.migrate()
+                if let encoded = try? JSONEncoder().encode(data) {
+                    UserDefaults.standard.set(encoded, forKey: Self.dataKey)
+                }
+            } else {
+                data = AppData.defaultSeed
+            }
         } else {
             data = AppData.defaultSeed
+        }
+    }
+
+    // MARK: - Legacy migration types (v1 → v2)
+
+    private struct LegacyRoutineTemplate: Codable {
+        var id: String
+        var name: String
+        var description: String
+        var priority: Priority
+        var category: String
+    }
+
+    private struct LegacyAppData: Codable {
+        var days: [String: [RoutineTask]]
+        var templates: [LegacyRoutineTemplate]
+        var categories: [String]
+
+        func migrate() -> AppData {
+            let newTemplates = templates.map { old in
+                RoutineTemplate(
+                    id: old.id,
+                    name: old.name,
+                    tasks: [TemplateTask(
+                        name: old.name,
+                        description: old.description,
+                        priority: old.priority,
+                        category: old.category
+                    )]
+                )
+            }
+            return AppData(days: days, templates: newTemplates, categories: categories)
         }
     }
 

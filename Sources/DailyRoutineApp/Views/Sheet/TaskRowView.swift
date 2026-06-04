@@ -118,18 +118,19 @@ struct TaskRowView: View {
                 .font(AppFonts.monoBold(10))
                 .kerning(0.8)
                 .foregroundColor(.white)
-                .padding(.horizontal, 20)
+                .padding(.horizontal, 10)
         }
         .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
         .fixedSize()
         .frame(height: 20)
         .background(
-            Capsule()
+            RoundedRectangle(cornerRadius: 4)
                 .fill(task.priority.color)
         )
         .overlay(
-            Capsule()
-                .stroke(task.priority.color.opacity(0.4), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 4)
+                .stroke(AppColors.ink, lineWidth: 1)
         )
     }
 
@@ -151,20 +152,25 @@ struct TaskRowView: View {
                 store.settingsTab = .categories
             }
         } label: {
-            HStack(spacing: 4) {
-                if task.category.isEmpty {
-                    Text("—")
-                        .font(AppFonts.mono(11))
-                        .foregroundColor(AppColors.inkFaint)
-                } else {
-                    Text(task.category)
-                        .font(AppFonts.mono(11))
-                        .foregroundColor(AppColors.inkMuted)
-                }
-            }
-            .padding(.horizontal, 12)
+            Text(task.category.isEmpty ? "—" : task.category)
+                .font(AppFonts.mono(10))
+                .kerning(0.5)
+                .foregroundColor(task.category.isEmpty ? AppColors.inkFaint : AppColors.ink)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
         }
         .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .background(
+            RoundedRectangle(cornerRadius: 4)
+                .fill(task.category.isEmpty ? Color.clear : AppColors.bg)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 4)
+                .stroke(task.category.isEmpty ? Color.clear : AppColors.borderStrong, lineWidth: 1)
+        )
+        .padding(.horizontal, 8)
     }
 
     private var actionCell: some View {

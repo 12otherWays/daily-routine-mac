@@ -50,7 +50,7 @@ struct RoutineTask: Codable, Identifiable, Hashable {
     }
 }
 
-struct RoutineTemplate: Codable, Identifiable, Hashable {
+struct TemplateTask: Codable, Identifiable, Hashable {
     var id: String
     var name: String
     var description: String
@@ -58,7 +58,7 @@ struct RoutineTemplate: Codable, Identifiable, Hashable {
     var category: String
 
     init(
-        id: String = "tmpl\(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8))",
+        id: String = "tt\(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8))",
         name: String = "",
         description: String = "",
         priority: Priority = .med,
@@ -73,6 +73,22 @@ struct RoutineTemplate: Codable, Identifiable, Hashable {
 
     func toTask() -> RoutineTask {
         RoutineTask(name: name, description: description, priority: priority, category: category)
+    }
+}
+
+struct RoutineTemplate: Codable, Identifiable, Hashable {
+    var id: String
+    var name: String
+    var tasks: [TemplateTask]
+
+    init(
+        id: String = "tmpl\(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8))",
+        name: String = "",
+        tasks: [TemplateTask] = []
+    ) {
+        self.id = id
+        self.name = name
+        self.tasks = tasks
     }
 }
 
@@ -112,9 +128,11 @@ struct AppData: Codable {
         AppData(
             days: [:],
             templates: [
-                RoutineTemplate(name: "Morning workout", description: "30 min cardio or strength", priority: .high, category: "Health"),
-                RoutineTemplate(name: "Read", description: "At least 20 pages", priority: .med, category: "Learning"),
-                RoutineTemplate(name: "Journal", description: "Write 3 things you're grateful for", priority: .low, category: "Mindfulness"),
+                RoutineTemplate(name: "Morning Routine", tasks: [
+                    TemplateTask(name: "Morning workout", description: "30 min cardio or strength", priority: .high, category: "Health"),
+                    TemplateTask(name: "Read", description: "At least 20 pages", priority: .med, category: "Learning"),
+                    TemplateTask(name: "Journal", description: "Write 3 things you're grateful for", priority: .low, category: "Mindfulness"),
+                ])
             ],
             categories: ["Health", "Work", "Learning", "Mindfulness", "Personal"]
         )
