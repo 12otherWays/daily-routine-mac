@@ -112,11 +112,17 @@ struct AppFieldStyle: ViewModifier {
             .background(
                 RoundedRectangle(cornerRadius: 6)
                     .fill(AppColors.surface)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(AppColors.borderStrong, lineWidth: 1)
+                    )
             )
-            .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .stroke(AppColors.borderStrong, lineWidth: 1)
-            )
+            // A `.plain` TextField only occupies its inner text glyph area, so the
+            // surrounding padding/box added above are NOT focusable. Without this,
+            // clicking in the padded margin fails to focus the field and typing
+            // does nothing. `.contentShape` makes the full styled rect the hit
+            // target so a click anywhere begins editing. (Same fix as the checkbox.)
+            .contentShape(Rectangle())
     }
 }
 

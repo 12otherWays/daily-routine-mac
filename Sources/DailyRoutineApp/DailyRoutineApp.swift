@@ -1,8 +1,26 @@
 import SwiftUI
+import AppKit
+
+// Running as a bare SwiftPM executable (no .app bundle), macOS launches the
+// process as a non-activating accessory: the window draws and mouse clicks
+// work, but the app never becomes the active/key app, so no TextField can
+// receive keyboard focus — typing does nothing anywhere. Promoting to a
+// regular foreground app and activating it restores keyboard input app-wide.
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        true
+    }
+}
 
 @main
 struct DailyRoutineApp: App {
 
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var store: AppStore
 
     init() {
