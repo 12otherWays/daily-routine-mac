@@ -64,6 +64,10 @@ struct ContentView: View {
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
+        // The palette (AppColors) is hardcoded for a light aesthetic. Force light
+        // appearance so native controls (TextField text, cursor, buttons) don't
+        // adopt Dark Mode colors — otherwise typed text renders white-on-white.
+        .preferredColorScheme(.light)
         .animation(.spring(response: 0.32, dampingFraction: 0.85), value: store.drawerTaskId)
         .animation(.spring(response: 0.32, dampingFraction: 0.85), value: store.settingsTab)
         .animation(.spring(response: 0.32, dampingFraction: 0.85), value: store.calendarDrawerOpen)

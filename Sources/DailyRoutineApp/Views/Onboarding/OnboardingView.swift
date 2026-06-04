@@ -59,6 +59,7 @@ struct OnboardingView: View {
             .overlay(RoundedRectangle(cornerRadius: 0).stroke(AppColors.ink, lineWidth: 1))
             .hardShadow(x: 8, y: 8)
         }
+        .preferredColorScheme(.light)
     }
 
     private func onboardingPoint(icon: String, title: String, desc: String) -> some View {

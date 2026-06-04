@@ -27,6 +27,7 @@ struct TemplatePickerView: View {
         }
         .frame(width: 580, height: 500)
         .background(AppColors.surface)
+        .preferredColorScheme(.light)
     }
 
     // MARK: - Header
