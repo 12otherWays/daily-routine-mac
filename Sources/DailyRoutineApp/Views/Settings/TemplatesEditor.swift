@@ -199,37 +199,57 @@ private struct TemplateGroupRow: View {
                 .appField()
                 .onSubmit { commitAddTask() }
 
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
                 Menu {
                     ForEach(Priority.allCases, id: \.self) { p in
-                        Button(p.label) { newPriority = p }
+                        Button {
+                            newPriority = p
+                        } label: {
+                            Label(p.label, systemImage: newPriority == p ? "checkmark" : "")
+                        }
                     }
                 } label: {
                     Text(newPriority.label)
-                        .pill(color: newPriority.color)
+                        .font(AppFonts.monoBold(10))
+                        .kerning(1)
+                        .foregroundColor(.white)
                 }
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
                 .fixedSize()
+                .padding(.horizontal, 12)
+                .frame(minWidth: 56, minHeight: 26)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(newPriority.color)
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 6))
 
                 Menu {
-                    Button("None") { newCategory = "" }
+                    Button("Clear") { newCategory = "" }
                     Divider()
                     ForEach(store.categories, id: \.self) { cat in
                         Button(cat) { newCategory = cat }
                     }
                 } label: {
-                    Text(newCategory.isEmpty ? "Category" : newCategory)
+                    Text(newCategory.isEmpty ? "—" : newCategory)
                         .font(AppFonts.mono(10))
-                        .foregroundColor(AppColors.inkMuted)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(AppColors.bg)
-                        .overlay(RoundedRectangle(cornerRadius: 4).stroke(AppColors.borderMid))
+                        .kerning(0.5)
+                        .foregroundColor(newCategory.isEmpty ? AppColors.inkFaint : AppColors.ink)
                 }
                 .menuStyle(.borderlessButton)
                 .menuIndicator(.hidden)
                 .fixedSize()
+                .padding(.horizontal, 12)
+                .frame(minWidth: 56, minHeight: 26)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(AppColors.surface)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(newCategory.isEmpty ? AppColors.borderMid : AppColors.borderStrong, lineWidth: 1)
+                )
 
                 Spacer()
 
