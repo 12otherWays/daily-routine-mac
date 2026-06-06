@@ -119,6 +119,9 @@ struct NavBarView: View {
                 .font(.system(size: 12))
                 .foregroundColor(AppColors.inkMuted)
                 .frame(width: 36, height: 44)
+                // Without this, only the tiny chevron glyph is clickable — the
+                // surrounding frame is dead space. Makes the full 36×44 tappable.
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .overlay(alignment: .trailing) {
