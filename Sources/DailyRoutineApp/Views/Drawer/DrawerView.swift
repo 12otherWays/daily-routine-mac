@@ -97,17 +97,35 @@ struct DrawerView: View {
                     .onDisappear { commitName() }
             }
 
-            // Description field
+            // Description field — bordered container + placeholder so an empty
+            // note reads as an editable field rather than a blank void.
             VStack(alignment: .leading, spacing: 6) {
                 Text("DESCRIPTION")
                     .eyebrow()
-                TextEditor(text: $editingDesc)
-                    .font(AppFonts.display(14))
-                    .foregroundColor(AppColors.inkMuted)
-                    .scrollContentBackground(.hidden)
-                    .background(Color.clear)
-                    .frame(minHeight: 100)
-                    .onDisappear { commitDesc() }
+                ZStack(alignment: .topLeading) {
+                    if editingDesc.isEmpty {
+                        Text("Add notes or details…")
+                            .font(AppFonts.mono(12))
+                            .foregroundColor(AppColors.inkFaint)
+                            .padding(.horizontal, 13)
+                            .padding(.vertical, 12)
+                            .allowsHitTesting(false)
+                    }
+                    TextEditor(text: $editingDesc)
+                        .font(AppFonts.mono(12))
+                        .foregroundColor(AppColors.ink)
+                        .scrollContentBackground(.hidden)
+                        .background(Color.clear)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 7)
+                        .frame(minHeight: 96)
+                        .onDisappear { commitDesc() }
+                }
+                .background(AppColors.bg)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(AppColors.borderMid, lineWidth: 1)
+                )
             }
 
             // Meta

@@ -274,30 +274,48 @@ private struct ContributionHeatmap: View {
         }
     }
 
+    // Month labels positioned by absolute x-offset above the column where each
+    // month begins. Free-floating (fixedSize) so a label wider than one ~11pt
+    // cell overflows cleanly instead of being clipped or shoving the row out of
+    // alignment with the grid below.
     private var monthLabels: some View {
-        HStack(spacing: gap) {
-            Color.clear.frame(width: labelW, height: 10)
-            ForEach(weeks.indices, id: \.self) { wi in
-                Text(monthLabel(at: wi))
+        ZStack(alignment: .topLeading) {
+            ForEach(monthStarts, id: \.column) { item in
+                Text(item.label)
                     .font(AppFonts.mono(8))
-                    .foregroundColor(AppColors.inkFaint)
-                    .frame(width: cell, height: 10, alignment: .leading)
+                    .kerning(0.5)
+                    .foregroundColor(AppColors.inkMuted)
                     .fixedSize()
+                    .offset(x: columnX(item.column))
             }
         }
+        .frame(maxWidth: .infinity, minHeight: 12, alignment: .topLeading)
     }
 
-    private func monthLabel(at wi: Int) -> String {
-        guard let key = weeks[wi].first?.key, !key.isEmpty else { return "" }
+    /// First column of each distinct month, with a minimum pixel gap so a
+    /// partial month at the left edge can't crowd the next label.
+    private var monthStarts: [(column: Int, label: String)] {
         let cal = Calendar.current
-        let month = cal.component(.month, from: date(from: key))
-        // Show the month name only on the first column of each new month.
-        if wi == 0 { return shortMonth(month) }
-        if let prevKey = weeks[wi - 1].first?.key,
-           cal.component(.month, from: date(from: prevKey)) == month {
-            return ""
+        var result: [(column: Int, label: String)] = []
+        var prevMonth = -1
+        var lastLabelX: CGFloat = -100
+        for wi in weeks.indices {
+            guard let key = weeks[wi].first?.key, !key.isEmpty else { continue }
+            let month = cal.component(.month, from: date(from: key))
+            guard month != prevMonth else { continue }
+            prevMonth = month
+            let x = columnX(wi)
+            if x - lastLabelX >= 22 {           // room for a 3-letter label
+                result.append((column: wi, label: shortMonth(month)))
+                lastLabelX = x
+            }
         }
-        return shortMonth(month)
+        return result
+    }
+
+    /// Left edge of grid column `wi`, accounting for the weekday-label gutter.
+    private func columnX(_ wi: Int) -> CGFloat {
+        labelW + gap + CGFloat(wi) * (cell + gap)
     }
 
     private func heatCell(_ c: HeatCell) -> some View {
