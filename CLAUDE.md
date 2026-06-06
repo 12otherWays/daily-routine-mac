@@ -177,7 +177,7 @@ In Stats mode the header swaps to `statsModeControl` (`← DAY | STATS`) with th
 
 ## Window
 
-- `minWidth: 900, idealWidth: 1100, minHeight: 660, idealHeight: 820`
+- **Fixed, non-resizable**: content frame `.frame(width: 900, height: 820)` + `.windowResizability(.contentSize)`. Users can't drag-resize or zoom the window.
 - `.windowStyle(.titleBar)` + `.windowToolbarStyle(.unified(showsTitle: false))`
 - Keyboard shortcuts: `⌘←` prev, `⌘→` next, `⌘T` go to today
 

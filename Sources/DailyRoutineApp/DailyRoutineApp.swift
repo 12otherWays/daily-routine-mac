@@ -46,10 +46,13 @@ struct DailyRoutineApp: App {
                     store.bootstrap()
                     appDelegate.store = store
                 }
-                .frame(minWidth: 900, idealWidth: 1100, minHeight: 660, idealHeight: 820)
+                .frame(width: 900, height: 660)
         }
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unified(showsTitle: false))
+        // Fixed, non-resizable window: the window sizes to the content frame
+        // above and can't be dragged larger/smaller.
+        .windowResizability(.contentSize)
         .commands {
             CommandGroup(replacing: .newItem) { }
             CommandGroup(after: .saveItem) {

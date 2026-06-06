@@ -99,19 +99,22 @@ struct ContentView: View {
 
     private var mainLayout: some View {
         VStack(spacing: 0) {
+            // Pinned header + progress bar — these stay put so only the task /
+            // content region below scrolls when the list grows.
+            HeaderView(done: done, total: total, pct: pct)
+                .padding(.horizontal, 40)
+                .padding(.top, 32)
+                .padding(.bottom, 20)
+
+            if store.viewMode != .stats {
+                progressBar
+                    .padding(.horizontal, 40)
+                    .padding(.bottom, 28)
+            }
+
+            // Scrollable content region.
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    HeaderView(done: done, total: total, pct: pct)
-                        .padding(.horizontal, 40)
-                        .padding(.top, 32)
-                        .padding(.bottom, 20)
-
-                    if store.viewMode != .stats {
-                        progressBar
-                            .padding(.horizontal, 40)
-                            .padding(.bottom, 28)
-                    }
-
                     contentArea
                         .padding(.horizontal, 40)
 
