@@ -25,9 +25,15 @@ struct StatsView: View {
             HStack(spacing: 16) {
                 StatCard(label: "Current streak", value: "\(streak)", unit: streak == 1 ? "day" : "days",
                          primary: streak >= 7, systemImage: streak > 0 ? "flame.fill" : "flame")
-                StatCard(label: "Best streak", value: "\(longest)", unit: longest == 1 ? "day" : "days")
-                StatCard(label: "Perfect days", value: "\(perfect)")
-                StatCard(label: "Completion rate", value: "\(Int(rate * 100))", unit: "%")
+                StatCard(label: "Best streak", value: "\(longest)", unit: longest == 1 ? "day" : "days",
+                         systemImage: "trophy.fill",
+                         iconColors: [Color(hex: "fbbf24"), Color(hex: "d97706")])
+                StatCard(label: "Perfect days", value: "\(perfect)",
+                         systemImage: "star.fill",
+                         iconColors: [Color(hex: "a78bfa"), Color(hex: "7c3aed")])
+                StatCard(label: "Completion rate", value: "\(Int(rate * 100))", unit: "%",
+                         systemImage: "chart.pie.fill",
+                         iconColors: [Color(hex: "34d399"), Color(hex: "059669")])
             }
 
             // 30-day bar chart
@@ -45,7 +51,9 @@ struct StatsView: View {
                         .foregroundStyle(item.rate >= 1.0 ? AppColors.ink : AppColors.inkMuted.opacity(0.5))
                         .cornerRadius(2)
                     }
-                    .chartYScale(domain: 0...100)
+                    // Domain padded a touch past 100 so the top "100%" label
+                    // renders fully below the top edge instead of being clipped.
+                    .chartYScale(domain: 0...106)
                     .chartXAxis {
                         AxisMarks(values: .stride(by: 7)) { value in
                             AxisValueLabel {
@@ -56,7 +64,7 @@ struct StatsView: View {
                         }
                     }
                     .chartYAxis {
-                        AxisMarks(position: .leading, values: [0, 50, 100]) { value in
+                        AxisMarks(position: .leading, values: [0, 25, 50, 75, 100]) { value in
                             AxisValueLabel {
                                 if let v = value.as(Double.self) {
                                     Text("\(Int(v))%").font(AppFonts.mono(9)).foregroundStyle(AppColors.inkFaint)
@@ -71,55 +79,12 @@ struct StatsView: View {
             }
             .chartContainer
 
-            // Weekday chart
-            VStack(alignment: .leading, spacing: 12) {
-                sectionHeader("BY DAY OF WEEK")
-
-                if byWeekday.isEmpty {
-                    noDataLabel
-                } else {
-                    Chart {
-                        ForEach(0..<7, id: \.self) { idx in
-                            let rate = byWeekday[idx] ?? 0
-                            BarMark(
-                                x: .value("Rate", rate * 100),
-                                y: .value("Day", weekdayLabels[idx])
-                            )
-                            .foregroundStyle(rate >= 0.8 ? AppColors.ink : AppColors.inkMuted.opacity(0.5))
-                            .cornerRadius(2)
-                        }
-                    }
-                    .chartXScale(domain: 0...100)
-                    .chartXAxis {
-                        AxisMarks(values: [0, 25, 50, 75, 100]) { value in
-                            AxisValueLabel {
-                                if let v = value.as(Double.self) {
-                                    Text("\(Int(v))%").font(AppFonts.mono(9)).foregroundStyle(AppColors.inkFaint)
-                                }
-                            }
-                            AxisGridLine().foregroundStyle(AppColors.borderWeak)
-                        }
-                    }
-                    .chartYAxis {
-                        AxisMarks { value in
-                            AxisValueLabel {
-                                if let s = value.as(String.self) {
-                                    Text(s).font(AppFonts.mono(10)).foregroundStyle(AppColors.inkMuted)
-                                }
-                            }
-                        }
-                    }
-                    .frame(height: 200)
-                    .chartBackground { _ in AppColors.bg }
-                }
-            }
-            .chartContainer
-
             // Activity heatmap
-            VStack(alignment: .leading, spacing: 12) {
-                sectionHeader("12-WEEK ACTIVITY")
-                ActivityHeatmap(recordsByDay: stats.recordsByDay)
+            VStack(alignment: .leading, spacing: 14) {
+                sectionHeader("ACTIVITY")
+                ContributionHeatmap(stats: stats, categories: store.categories)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .chartContainer
 
             // Category breakdown
@@ -156,49 +121,135 @@ struct StatsView: View {
     }
 }
 
-// MARK: - Activity Heatmap (12 weeks × 7 days)
+// MARK: - Contribution Heatmap (rolling 6-month grid + filters)
 
-private struct ActivityHeatmap: View {
-    let recordsByDay: [String: [TaskRecord]]
-    @State private var hoveredKey: String? = nil
+private struct ContributionHeatmap: View {
+    let stats: StatsInput
+    let categories: [String]
 
-    private var weeks: [[String]] {
-        var cal = Calendar.current
-        cal.firstWeekday = 2
-        let today = cal.startOfDay(for: Date())
-        // Find the Monday 11 weeks ago
-        let todayWeekday = cal.component(.weekday, from: today)
-        let daysFromMon = (todayWeekday - 2 + 7) % 7
-        guard let thisMonday = cal.date(byAdding: .day, value: -daysFromMon, to: today),
-              let startMonday = cal.date(byAdding: .weekOfYear, value: -11, to: thisMonday)
-        else { return [] }
+    // Date whose week anchors the right edge of the grid. Defaults to today;
+    // arrows shift it ±6 months, the year menu jumps it to Jun of that year.
+    @State private var endDate: Date = Date()
+    @State private var category: String? = nil          // nil = all categories
+    @State private var stateFilter: HeatStateFilter = .all
 
-        return (0..<12).map { weekOffset in
-            (0..<7).compactMap { dayOffset -> String? in
-                let base = cal.date(byAdding: .weekOfYear, value: weekOffset, to: startMonday)
-                return base.flatMap { cal.date(byAdding: .day, value: dayOffset, to: $0) }
-                    .map { dateKey(from: $0) }
-            }
-        }
+    private let weekCount = 26
+    private let cell: CGFloat = 15
+    private let gap: CGFloat = 4
+    private let labelW: CGFloat = 14
+
+    private var weeks: [[HeatCell]] {
+        heatmapWeeks(stats, endDate: endDate, weeks: weekCount,
+                     category: category, stateFilter: stateFilter)
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 4) {
-            // Weekday labels
-            VStack(spacing: 4) {
-                ForEach(["M", "T", "W", "T", "F", "S", "S"], id: \.self) { label in
-                    Text(label)
-                        .font(AppFonts.mono(9))
-                        .foregroundColor(AppColors.inkFaint)
-                        .frame(width: 12, height: 14)
+        VStack(alignment: .leading, spacing: 12) {
+            controlsRow
+            grid
+            legend
+        }
+    }
+
+    // MARK: Controls
+
+    private var controlsRow: some View {
+        HStack(spacing: 10) {
+            // Window navigation
+            navButton("chevron.left") { shiftMonths(-6) }
+            Text(rangeLabel)
+                .font(AppFonts.monoBold(11))
+                .foregroundColor(AppColors.ink)
+                .frame(minWidth: 124)
+            navButton("chevron.right", disabled: atPresent) { shiftMonths(6) }
+
+            // Year jump
+            Menu {
+                ForEach(yearsWithData(stats), id: \.self) { y in
+                    Button(String(y)) { jumpToYear(y) }
                 }
+            } label: {
+                filterLabel(text: String(Calendar.current.component(.year, from: endDate)),
+                            icon: "calendar")
             }
-            // Week columns
-            HStack(alignment: .top, spacing: 4) {
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+
+            Spacer()
+
+            // Category filter
+            Menu {
+                Button("All categories") { category = nil }
+                Divider()
+                ForEach(categories, id: \.self) { cat in
+                    Button(cat) { category = cat }
+                }
+            } label: {
+                filterLabel(text: category ?? "All categories", icon: "tag")
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+
+            // Completion-state filter
+            Menu {
+                ForEach(HeatStateFilter.allCases, id: \.self) { f in
+                    Button(f.rawValue) { stateFilter = f }
+                }
+            } label: {
+                filterLabel(text: stateFilter.rawValue, icon: "line.3.horizontal.decrease")
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+        }
+    }
+
+    private func navButton(_ icon: String, disabled: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(disabled ? AppColors.inkFaint : AppColors.inkMuted)
+                .frame(width: 22, height: 22)
+                .background(AppColors.bg)
+                .overlay(RoundedRectangle(cornerRadius: 4).stroke(AppColors.borderMid))
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+    }
+
+    private func filterLabel(text: String, icon: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon).font(.system(size: 9))
+            Text(text).font(AppFonts.mono(10)).kerning(0.3)
+        }
+        .foregroundColor(AppColors.ink)
+        .padding(.horizontal, 10)
+        .frame(height: 22)
+        .background(AppColors.bg)
+        .overlay(RoundedRectangle(cornerRadius: 4).stroke(AppColors.borderMid))
+    }
+
+    // MARK: Grid
+
+    private var grid: some View {
+        VStack(alignment: .leading, spacing: gap) {
+            monthLabels
+            HStack(alignment: .top, spacing: gap) {
+                // Weekday labels (Mon/Wed/Fri only, GitHub-style)
+                VStack(spacing: gap) {
+                    ForEach(Array(["M", "", "W", "", "F", "", ""].enumerated()), id: \.offset) { _, label in
+                        Text(label)
+                            .font(AppFonts.mono(8))
+                            .foregroundColor(AppColors.inkFaint)
+                            .frame(width: labelW, height: cell)
+                    }
+                }
                 ForEach(weeks.indices, id: \.self) { wi in
-                    VStack(spacing: 4) {
-                        ForEach(weeks[wi], id: \.self) { key in
-                            heatCell(for: key)
+                    VStack(spacing: gap) {
+                        ForEach(weeks[wi], id: \.key) { c in
+                            heatCell(c)
                         }
                     }
                 }
@@ -206,21 +257,104 @@ private struct ActivityHeatmap: View {
         }
     }
 
-    private func heatCell(for key: String) -> some View {
-        let tasks = recordsByDay[key] ?? []
-        let rate: Double = tasks.isEmpty ? 0 : Double(tasks.filter(\.done).count) / Double(tasks.count)
-        let cellColor: Color = tasks.isEmpty ? AppColors.borderWeak :
-            (rate >= 1.0 ? AppColors.ink :
-             rate >= 0.5 ? AppColors.inkMuted.opacity(0.5) :
-             AppColors.inkFaint.opacity(0.3))
+    private var monthLabels: some View {
+        HStack(spacing: gap) {
+            Color.clear.frame(width: labelW, height: 10)
+            ForEach(weeks.indices, id: \.self) { wi in
+                Text(monthLabel(at: wi))
+                    .font(AppFonts.mono(8))
+                    .foregroundColor(AppColors.inkFaint)
+                    .frame(width: cell, height: 10, alignment: .leading)
+                    .fixedSize()
+            }
+        }
+    }
 
-        return Rectangle()
-            .fill(key == todayKey() ? AppColors.accent : cellColor)
-            .frame(width: 14, height: 14)
-            .clipShape(RoundedRectangle(cornerRadius: 2))
-            .help(tasks.isEmpty
-                  ? key
-                  : "\(key): \(tasks.filter(\.done).count)/\(tasks.count) done")
+    private func monthLabel(at wi: Int) -> String {
+        guard let key = weeks[wi].first?.key, !key.isEmpty else { return "" }
+        let cal = Calendar.current
+        let month = cal.component(.month, from: date(from: key))
+        // Show the month name only on the first column of each new month.
+        if wi == 0 { return shortMonth(month) }
+        if let prevKey = weeks[wi - 1].first?.key,
+           cal.component(.month, from: date(from: prevKey)) == month {
+            return ""
+        }
+        return shortMonth(month)
+    }
+
+    private func heatCell(_ c: HeatCell) -> some View {
+        let isToday = c.key == todayKey()
+        return RoundedRectangle(cornerRadius: 3)
+            .fill(color(for: c.state))
+            .frame(width: cell, height: cell)
+            .overlay(
+                RoundedRectangle(cornerRadius: 3)
+                    .stroke(isToday ? AppColors.accent : Color.clear, lineWidth: 1.5)
+            )
+            .help(c.total == 0 ? c.key : "\(c.key) · \(c.done)/\(c.total) done")
+    }
+
+    private func color(for state: HeatState) -> Color {
+        switch state {
+        case .empty:   AppColors.borderWeak        // grey — a day with no tasks
+        case .partial: AppColors.inkFaint          // light grey — tasks written
+        case .done:    AppColors.ink               // dark grey — all completed
+        }
+    }
+
+    // MARK: Legend
+
+    private var legend: some View {
+        HStack(spacing: 14) {
+            legendItem(color(for: .empty), "No tasks")
+            legendItem(color(for: .partial), "Tasks added")
+            legendItem(color(for: .done), "All done")
+            Spacer()
+        }
+        .padding(.top, 2)
+    }
+
+    private func legendItem(_ c: Color, _ label: String) -> some View {
+        HStack(spacing: 5) {
+            RoundedRectangle(cornerRadius: 3).fill(c).frame(width: 11, height: 11)
+            Text(label).font(AppFonts.mono(9)).foregroundColor(AppColors.inkMuted)
+        }
+    }
+
+    // MARK: Window math
+
+    private var atPresent: Bool {
+        Calendar.current.isDate(endDate, equalTo: Date(), toGranularity: .day) ||
+        endDate > Date()
+    }
+
+    private func shiftMonths(_ months: Int) {
+        let cal = Calendar.current
+        guard let shifted = cal.date(byAdding: .month, value: months, to: endDate) else { return }
+        endDate = min(shifted, cal.startOfDay(for: Date()).addingTimeInterval(86_399))
+    }
+
+    private func jumpToYear(_ year: Int) {
+        var comps = DateComponents()
+        comps.year = year; comps.month = 6; comps.day = 30
+        if let d = Calendar.current.date(from: comps) {
+            endDate = min(d, Date())
+        }
+    }
+
+    private var rangeLabel: String {
+        guard let first = weeks.first?.first?.key, !first.isEmpty,
+              let last = weeks.last?.last?.key, !last.isEmpty else { return "" }
+        let f = DateFormatter(); f.dateFormat = "MMM yyyy"
+        let start = f.string(from: date(from: first))
+        let end = f.string(from: date(from: last))
+        return start == end ? start : "\(start) – \(end)"
+    }
+
+    private func shortMonth(_ m: Int) -> String {
+        let names = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+        return (1...12).contains(m) ? names[m - 1] : ""
     }
 }
 

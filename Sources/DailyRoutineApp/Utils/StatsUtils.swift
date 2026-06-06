@@ -91,6 +91,74 @@ func completionByWeekday(_ stats: StatsInput) -> [Int: Double] {
     }
 }
 
+// MARK: - Contribution heatmap
+
+// Per-day state used to colour a heatmap cell.
+enum HeatState { case empty, partial, done }
+
+// Optional "only show…" filter applied on top of the colour mapping.
+// Non-matching days collapse back to `.empty` so they read as inactive.
+enum HeatStateFilter: String, CaseIterable {
+    case all     = "All days"
+    case perfect = "Perfect only"
+    case misses  = "Has misses"
+}
+
+struct HeatCell: Hashable {
+    let key: String        // yyyy-MM-dd, or "" for padding cells outside the range
+    let state: HeatState
+    let done: Int
+    let total: Int
+}
+
+// Builds a Monday-aligned week grid (`weeks` columns × 7 rows) ending in the
+// week that contains `endDate`. Each cell reflects that day's tasks, optionally
+// narrowed to a single `category`, then run through `stateFilter`.
+func heatmapWeeks(_ stats: StatsInput,
+                  endDate: Date,
+                  weeks: Int = 26,
+                  category: String? = nil,
+                  stateFilter: HeatStateFilter = .all) -> [[HeatCell]] {
+    var cal = Calendar.current
+    cal.firstWeekday = 2
+    let end = cal.startOfDay(for: endDate)
+    let endWeekday = cal.component(.weekday, from: end)
+    let daysFromMon = (endWeekday - 2 + 7) % 7
+    guard let thisMonday = cal.date(byAdding: .day, value: -daysFromMon, to: end),
+          let startMonday = cal.date(byAdding: .weekOfYear, value: -(weeks - 1), to: thisMonday)
+    else { return [] }
+
+    return (0..<weeks).map { weekOffset in
+        (0..<7).compactMap { dayOffset -> HeatCell? in
+            guard let base = cal.date(byAdding: .weekOfYear, value: weekOffset, to: startMonday),
+                  let d = cal.date(byAdding: .day, value: dayOffset, to: base)
+            else { return nil }
+            let key = dateKey(from: d)
+            var tasks = stats.recordsByDay[key] ?? []
+            if let category { tasks = tasks.filter { $0.category == category } }
+
+            let total = tasks.count
+            let done = tasks.filter(\.done).count
+            var state: HeatState = total == 0 ? .empty : (done == total ? .done : .partial)
+            switch stateFilter {
+            case .all:     break
+            case .perfect: if state != .done    { state = .empty }
+            case .misses:  if state != .partial { state = .empty }
+            }
+            return HeatCell(key: key, state: state, done: done, total: total)
+        }
+    }
+}
+
+// Distinct years that contain at least one task, newest first, always including
+// the current year so the year-jump menu is never empty.
+func yearsWithData(_ stats: StatsInput) -> [Int] {
+    let cal = Calendar.current
+    var years = Set(stats.recordsByDay.keys.map { cal.component(.year, from: date(from: $0)) })
+    years.insert(cal.component(.year, from: Date()))
+    return years.sorted(by: >)
+}
+
 // Completion rate per category, busiest first.
 func completionByCategory(_ stats: StatsInput) -> [(category: String, done: Int, total: Int)] {
     var map = [String: (done: Int, total: Int)]()
