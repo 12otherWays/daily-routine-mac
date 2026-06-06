@@ -135,6 +135,14 @@ Everything lives in `AppStore` (single source of truth, injected as `@Environmen
 - **Navigation**: prev/next shift the window ±12 months; next is disabled at present (`atPresent`).
 - **Filters**: `category` (nil = all) and `stateFilter` (`HeatStateFilter`) feed `heatmapWeeks(...)`. Today's cell is outlined with `AppColors.accent`.
 
+### By Category (`CategoryBreakdown`)
+
+Per-category progress rows (top 8 by volume). Each row: category label (100w), a horizontal track + ink fill bar, and a `done/total` count. Track and fill are `clipShape(RoundedRectangle(cornerRadius: 4))` for a soft curve (not square).
+
+## NavBar — Button Behaviour
+
+`NavBarView` (`Views/.../NavBarView.swift`) prev/next arrows are `Button` + `.buttonStyle(.plain)` with an SF Symbol label. The image carries `.contentShape(Rectangle())` so the full 36×44 frame is the hit target — without it only the chevron glyph is clickable and the arrows feel dead. (Same fix pattern as the TaskRowView checkbox.)
+
 ## Sidebar Overlays
 
 DrawerView, SettingsView, and CalendarDrawerView are rendered in a `ZStack(alignment: .trailing)` in `ContentView`. They animate in/out via `.spring(response: 0.32, dampingFraction: 0.85)`.
