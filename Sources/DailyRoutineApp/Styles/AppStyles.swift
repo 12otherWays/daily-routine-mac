@@ -1,6 +1,27 @@
 import SwiftUI
 import AppKit
 
+// MARK: - Layout
+//
+// The window is fixed and non-resizable (see DailyRoutineApp), so page widths
+// are deterministic. Deriving content widths from these constants — instead of
+// measuring at runtime — avoids layout feedback loops (e.g. a wide child
+// inflating its own container) that caused the Stats page to overflow.
+
+enum AppLayout {
+    static let windowWidth: CGFloat  = 900
+    static let windowHeight: CGFloat = 660
+    /// Horizontal padding ContentView applies around the page content.
+    static let pageHPadding: CGFloat = 40
+    /// Inner padding of the `chartContainer` card (per side).
+    static let cardPadding: CGFloat  = 20
+
+    /// Width available to page content inside ContentView's horizontal padding.
+    static var contentWidth: CGFloat { windowWidth - pageHPadding * 2 }   // 820
+    /// Width available inside a `chartContainer` card.
+    static var cardInnerWidth: CGFloat { contentWidth - cardPadding * 2 } // 780
+}
+
 // MARK: - Colors
 
 enum AppColors {

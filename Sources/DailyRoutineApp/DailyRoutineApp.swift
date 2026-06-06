@@ -46,7 +46,7 @@ struct DailyRoutineApp: App {
                     store.bootstrap()
                     appDelegate.store = store
                 }
-                .frame(width: 900, height: 660)
+                .frame(width: AppLayout.windowWidth, height: AppLayout.windowHeight)
         }
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unified(showsTitle: false))

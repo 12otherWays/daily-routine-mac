@@ -18,11 +18,18 @@ struct StatsView: View {
 
     private let weekdayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
+    // Every 7th day's short label, used as explicit (categorical) x-axis marks.
+    private var xAxisLabels: [String] {
+        last30.enumerated().compactMap { index, item in
+            index % 7 == 0 ? shortDate(item.key) : nil
+        }
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 32) {
+        VStack(alignment: .leading, spacing: 22) {
 
             // KPI cards row
-            HStack(spacing: 16) {
+            HStack(spacing: 12) {
                 StatCard(label: "Current streak", value: "\(streak)", unit: streak == 1 ? "day" : "days",
                          primary: streak >= 7, systemImage: streak > 0 ? "flame.fill" : "flame")
                 StatCard(label: "Best streak", value: "\(longest)", unit: longest == 1 ? "day" : "days",
@@ -54,8 +61,11 @@ struct StatsView: View {
                     // Domain padded a touch past 100 so the top "100%" label
                     // renders fully below the top edge instead of being clipped.
                     .chartYScale(domain: 0...106)
+                    // The x-axis is categorical (String labels), so we pass
+                    // explicit label values (every 7th day) — `.stride(by:)` only
+                    // applies to numeric/date axes and triggers a runtime warning.
                     .chartXAxis {
-                        AxisMarks(values: .stride(by: 7)) { value in
+                        AxisMarks(values: xAxisLabels) { value in
                             AxisValueLabel {
                                 if let s = value.as(String.self) {
                                     Text(s).font(AppFonts.mono(9)).foregroundStyle(AppColors.inkFaint)
@@ -73,7 +83,7 @@ struct StatsView: View {
                             AxisGridLine().foregroundStyle(AppColors.borderWeak)
                         }
                     }
-                    .frame(height: 160)
+                    .frame(height: 130)
                     .chartBackground { _ in AppColors.bg }
                 }
             }
@@ -82,7 +92,8 @@ struct StatsView: View {
             // Activity heatmap
             VStack(alignment: .leading, spacing: 14) {
                 sectionHeader("ACTIVITY")
-                ContributionHeatmap(stats: stats, categories: store.categories)
+                ContributionHeatmap(stats: stats, categories: store.categories,
+                                    containerWidth: AppLayout.cardInnerWidth)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .chartContainer
@@ -126,26 +137,27 @@ struct StatsView: View {
 private struct ContributionHeatmap: View {
     let stats: StatsInput
     let categories: [String]
+    /// Deterministic inner width of the card (window is fixed, so no measuring).
+    let containerWidth: CGFloat
 
     // Date whose week anchors the right edge of the grid. Defaults to today;
     // arrows shift it ±12 months (one full window).
     @State private var endDate: Date = Date()
     @State private var category: String? = nil          // nil = all categories
     @State private var stateFilter: HeatStateFilter = .all
-    @State private var availableWidth: CGFloat = 0      // measured card inner width
 
     private let weekCount = 52               // ~12 months; cells size to fill the grid column
-    private let gap: CGFloat = 6
+    private let gap: CGFloat = 3             // tight gap so year-long grid reads as a block at 820pt width
     private let labelW: CGFloat = 34
     private let weekdayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
     // Square cell sized so the weekday-label gutter + columns exactly fill the
-    // measured width. Card height follows from this (7 · cell + gaps).
+    // container width. Computed from a known width (not measured), so the grid
+    // can never balloon and overflow the page.
     private var cell: CGFloat {
-        guard availableWidth > 0 else { return 16 }
         let columnGaps = gap * CGFloat(weekCount - 1)
-        let avail = availableWidth - labelW - gap - columnGaps
-        return max(8, avail / CGFloat(weekCount))
+        let avail = containerWidth - labelW - gap - columnGaps
+        return max(6, avail / CGFloat(weekCount))
     }
 
     private var weeks: [[HeatCell]] {
@@ -156,17 +168,9 @@ private struct ContributionHeatmap: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             topBar
-
-            // Grid spans the full card width; its measured width drives cell size.
             grid
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-                .background(
-                    GeometryReader { geo in
-                        Color.clear.preference(key: HeatWidthKey.self, value: geo.size.width)
-                    }
-                )
-                .onPreferenceChange(HeatWidthKey.self) { availableWidth = $0 }
         }
+        .frame(width: containerWidth, alignment: .leading)
     }
 
     // MARK: Top control bar — legend (left) · filters + range/nav (right), one line
@@ -351,12 +355,6 @@ private struct ContributionHeatmap: View {
         let names = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
         return (1...12).contains(m) ? names[m - 1] : ""
     }
-}
-
-// Measures the heatmap card's inner width so cells can be sized to fill it.
-private struct HeatWidthKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 
 // MARK: - Category Breakdown

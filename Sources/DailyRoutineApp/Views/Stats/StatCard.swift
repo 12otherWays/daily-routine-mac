@@ -9,29 +9,31 @@ struct StatCard: View {
     var iconColors: [Color] = [Color(hex: "fb923c"), Color(hex: "ef4444")]  // top → bottom gradient
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             Text(label.uppercased())
-                .font(AppFonts.mono(9))
-                .kerning(1.5)
+                .font(AppFonts.mono(8))
+                .kerning(1.2)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
                 .foregroundColor(primary ? AppColors.bg.opacity(0.7) : AppColors.inkMuted)
 
-            HStack(alignment: .lastTextBaseline, spacing: 4) {
+            HStack(alignment: .lastTextBaseline, spacing: 3) {
                 Text(value)
-                    .font(AppFonts.monoMedium(32))
+                    .font(AppFonts.monoMedium(28))
                     .foregroundColor(primary ? AppColors.bg : AppColors.ink)
                 if !unit.isEmpty {
                     Text(unit)
-                        .font(AppFonts.mono(14))
+                        .font(AppFonts.mono(12))
                         .foregroundColor(primary ? AppColors.bg.opacity(0.7) : AppColors.inkMuted)
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(20)
+        .padding(16)
         .overlay(alignment: .topTrailing) {
             if !systemImage.isEmpty {
                 Image(systemName: systemImage)
-                    .font(.system(size: 18))
+                    .font(.system(size: 15))
                     .foregroundStyle(
                         LinearGradient(
                             colors: iconColors,
@@ -39,7 +41,7 @@ struct StatCard: View {
                             endPoint: .bottom
                         )
                     )
-                    .padding(20)
+                    .padding(14)
             }
         }
         .background(primary ? AppColors.ink : AppColors.surface)

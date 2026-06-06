@@ -130,9 +130,9 @@ Everything lives in `AppStore` (single source of truth, injected as `@Environmen
 
 `ContributionHeatmap` (private struct in `StatsView.swift`) renders a rolling ~12-month GitHub-style grid (`weekCount = 52`).
 
-- **Layout**: a `VStack` of a top control bar + the grid below. The grid spans the full card width (`maxWidth: .infinity`); its width is measured via `HeatWidthKey` preference and drives the square `cell` size so the weekday-label gutter (`labelW = 34`) + columns exactly fill the row.
+- **Layout**: a `VStack` of a top control bar + the grid below, pinned to a **deterministic** `containerWidth` (passed in as `AppLayout.cardInnerWidth` = 780pt). The square `cell` size is computed from that width — `(containerWidth − labelW(34) − gaps) / weekCount` — **not measured at runtime**. The old `GeometryReader`/`HeatWidthKey` approach was removed: because the grid's own cells set its width, measuring it created a feedback loop that inflated the grid and overflowed the fixed-width window. Since the window is fixed (`AppLayout`), the widths are known up front.
 - **Top control bar** (`topBar`, single `HStack`): legend swatches on the left (No tasks / Tasks added / All done), then a `Spacer`, then the category filter menu, the state filter menu, the `rangeLabel` (e.g. "Jan 25 – Jan 26"), and the prev/next `<` `>` nav buttons — all on one line.
-- **Cell gap**: `gap = 6` between cells (also subtracted from the available width in the `cell` calc).
+- **Cell gap**: `gap = 3` between cells (tuned for the fixed 900pt-wide window; also subtracted from the available width in the `cell` calc).
 - **Navigation**: prev/next shift the window ±12 months; next is disabled at present (`atPresent`).
 - **Filters**: `category` (nil = all) and `stateFilter` (`HeatStateFilter`) feed `heatmapWeeks(...)`. Today's cell is outlined with `AppColors.accent`.
 
@@ -177,7 +177,8 @@ In Stats mode the header swaps to `statsModeControl` (`← DAY | STATS`) with th
 
 ## Window
 
-- **Fixed, non-resizable**: content frame `.frame(width: 900, height: 820)` + `.windowResizability(.contentSize)`. Users can't drag-resize or zoom the window.
+- **Fixed, non-resizable**: content frame `.frame(width: AppLayout.windowWidth, height: AppLayout.windowHeight)` (900×660) + `.windowResizability(.contentSize)`. Users can't drag-resize or zoom the window.
+- Because the window is fixed, page widths are deterministic — `AppLayout` (in `AppStyles.swift`) exposes `contentWidth` (820) and `cardInnerWidth` (780) so views can size to known widths instead of measuring (which previously caused the Stats heatmap to overflow).
 - `.windowStyle(.titleBar)` + `.windowToolbarStyle(.unified(showsTitle: false))`
 - Keyboard shortcuts: `⌘←` prev, `⌘→` next, `⌘T` go to today
 
