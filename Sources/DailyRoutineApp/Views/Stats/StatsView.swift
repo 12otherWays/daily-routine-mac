@@ -121,22 +121,32 @@ struct StatsView: View {
     }
 }
 
-// MARK: - Contribution Heatmap (rolling 6-month grid + filters)
+// MARK: - Contribution Heatmap (rolling 12-month grid + filters)
 
 private struct ContributionHeatmap: View {
     let stats: StatsInput
     let categories: [String]
 
     // Date whose week anchors the right edge of the grid. Defaults to today;
-    // arrows shift it ±6 months, the year menu jumps it to Jun of that year.
+    // arrows shift it ±12 months (one full window).
     @State private var endDate: Date = Date()
     @State private var category: String? = nil          // nil = all categories
     @State private var stateFilter: HeatStateFilter = .all
+    @State private var availableWidth: CGFloat = 0      // measured card inner width
 
-    private let weekCount = 26
-    private let cell: CGFloat = 15
-    private let gap: CGFloat = 4
-    private let labelW: CGFloat = 14
+    private let weekCount = 52
+    private let gap: CGFloat = 3
+    private let labelW: CGFloat = 32
+    private let weekdayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+    // Square cell sized so the weekday-label gutter + 52 columns exactly fill the
+    // measured width. Height of the card follows from this (7 · cell + gaps).
+    private var cell: CGFloat {
+        guard availableWidth > 0 else { return 14 }
+        let columnGaps = gap * CGFloat(weekCount - 1)
+        let avail = availableWidth - labelW - gap - columnGaps
+        return max(8, avail / CGFloat(weekCount))
+    }
 
     private var weeks: [[HeatCell]] {
         heatmapWeeks(stats, endDate: endDate, weeks: weekCount,
@@ -149,6 +159,13 @@ private struct ContributionHeatmap: View {
             grid
             legend
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            GeometryReader { geo in
+                Color.clear.preference(key: HeatWidthKey.self, value: geo.size.width)
+            }
+        )
+        .onPreferenceChange(HeatWidthKey.self) { availableWidth = $0 }
     }
 
     // MARK: Controls
@@ -156,25 +173,12 @@ private struct ContributionHeatmap: View {
     private var controlsRow: some View {
         HStack(spacing: 10) {
             // Window navigation
-            navButton("chevron.left") { shiftMonths(-6) }
+            navButton("chevron.left") { shiftMonths(-12) }
             Text(rangeLabel)
                 .font(AppFonts.monoBold(11))
                 .foregroundColor(AppColors.ink)
                 .frame(minWidth: 124)
-            navButton("chevron.right", disabled: atPresent) { shiftMonths(6) }
-
-            // Year jump
-            Menu {
-                ForEach(yearsWithData(stats), id: \.self) { y in
-                    Button(String(y)) { jumpToYear(y) }
-                }
-            } label: {
-                filterLabel(text: String(Calendar.current.component(.year, from: endDate)),
-                            icon: "calendar")
-            }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
+            navButton("chevron.right", disabled: atPresent) { shiftMonths(12) }
 
             Spacer()
 
@@ -237,13 +241,13 @@ private struct ContributionHeatmap: View {
         VStack(alignment: .leading, spacing: gap) {
             monthLabels
             HStack(alignment: .top, spacing: gap) {
-                // Weekday labels (Mon/Wed/Fri only, GitHub-style)
+                // Weekday labels — all 7 rows, three-letter names
                 VStack(spacing: gap) {
-                    ForEach(Array(["M", "", "W", "", "F", "", ""].enumerated()), id: \.offset) { _, label in
+                    ForEach(weekdayNames, id: \.self) { label in
                         Text(label)
                             .font(AppFonts.mono(8))
                             .foregroundColor(AppColors.inkFaint)
-                            .frame(width: labelW, height: cell)
+                            .frame(width: labelW, height: cell, alignment: .trailing)
                     }
                 }
                 ForEach(weeks.indices, id: \.self) { wi in
@@ -335,14 +339,6 @@ private struct ContributionHeatmap: View {
         endDate = min(shifted, cal.startOfDay(for: Date()).addingTimeInterval(86_399))
     }
 
-    private func jumpToYear(_ year: Int) {
-        var comps = DateComponents()
-        comps.year = year; comps.month = 6; comps.day = 30
-        if let d = Calendar.current.date(from: comps) {
-            endDate = min(d, Date())
-        }
-    }
-
     private var rangeLabel: String {
         guard let first = weeks.first?.first?.key, !first.isEmpty,
               let last = weeks.last?.last?.key, !last.isEmpty else { return "" }
@@ -356,6 +352,12 @@ private struct ContributionHeatmap: View {
         let names = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
         return (1...12).contains(m) ? names[m - 1] : ""
     }
+}
+
+// Measures the heatmap card's inner width so cells can be sized to fill it.
+private struct HeatWidthKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 
 // MARK: - Category Breakdown
