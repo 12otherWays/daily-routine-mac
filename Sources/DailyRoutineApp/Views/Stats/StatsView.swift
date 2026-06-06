@@ -378,11 +378,11 @@ private struct CategoryBreakdown: View {
                             Rectangle()
                                 .fill(AppColors.borderWeak)
                                 .frame(height: 12)
-                                .clipShape(RoundedRectangle(cornerRadius: 2))
+                                .clipShape(RoundedRectangle(cornerRadius: 4))
                             Rectangle()
                                 .fill(AppColors.ink)
                                 .frame(width: item.total == 0 ? 0 : CGFloat(item.done) / CGFloat(item.total) * geo.size.width, height: 12)
-                                .clipShape(RoundedRectangle(cornerRadius: 2))
+                                .clipShape(RoundedRectangle(cornerRadius: 4))
                         }
                     }
                     .frame(height: 12)
