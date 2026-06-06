@@ -64,6 +64,26 @@ final class FileTaskRepositoryTests: XCTestCase {
         XCTAssertThrowsError(try repo.importData(Data("not json".utf8)))
     }
 
+    func testExportIsEncryptedNotPlaintext() throws {
+        let repo = FileTaskRepository(directory: dir)
+        try repo.insertTask(RoutineTask(id: "t1", name: "SecretTaskName"), day: "2026-06-06")
+        try repo.save()
+        let blob = try repo.exportData()
+        // The task name must not appear in cleartext in the exported bytes.
+        XCTAssertNil(blob.range(of: Data("SecretTaskName".utf8)),
+                     "export should be encrypted, not readable plaintext")
+    }
+
+    func testImportAcceptsPlainJSONForBackCompat() throws {
+        // A plain-JSON export from before encryption must still import.
+        let plain = """
+        {"days":{"2026-06-06":[{"id":"t1","name":"Legacy","description":"","priority":"med","category":"","done":false}]},"templates":[],"categories":[]}
+        """
+        let repo = FileTaskRepository(directory: dir)
+        try repo.importData(Data(plain.utf8))
+        XCTAssertEqual(repo.tasks(forDay: "2026-06-06").first?.name, "Legacy")
+    }
+
     func testRecoversFromCorruptPrimaryUsingBackup() throws {
         let repo = FileTaskRepository(directory: dir)
         try repo.insertTask(RoutineTask(id: "t1", name: "Keep me"), day: "2026-06-06")

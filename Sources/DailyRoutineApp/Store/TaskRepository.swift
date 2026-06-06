@@ -316,15 +316,32 @@ final class FileTaskRepository: TaskRepository {
     func exportData() throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let json: Data
         do {
-            return try encoder.encode(data)
+            json = try encoder.encode(data)
+        } catch {
+            throw StorageError.encodeFailed(underlying: error)
+        }
+        // Encrypt so the backup isn't human-readable. See ExportCrypto for the
+        // (intentional) limits of this protection.
+        do {
+            return try ExportCrypto.encrypt(json)
         } catch {
             throw StorageError.encodeFailed(underlying: error)
         }
     }
 
     func importData(_ blob: Data) throws {
-        guard let decoded = Self.decode(blob) else { throw StorageError.decodeFailed }
+        // Decrypt if it's our encrypted container; otherwise treat as plain JSON
+        // (back-compat with older plain exports and hand-edited files).
+        let jsonBlob: Data
+        do {
+            jsonBlob = try ExportCrypto.decryptIfEncrypted(blob) ?? blob
+        } catch {
+            // Looked encrypted (magic header present) but couldn't be opened.
+            throw StorageError.decodeFailed
+        }
+        guard let decoded = Self.decode(jsonBlob) else { throw StorageError.decodeFailed }
         data = decoded
         try save()
     }

@@ -71,11 +71,15 @@ struct DailyRoutineApp: App {
 
     // MARK: - Export / Import (AppKit panels)
 
+    /// Custom backup type. Exports are encrypted (binary), so a `.drbackup`
+    /// extension is clearer than `.json`. Falls back to `.data` if unavailable.
+    private var backupType: UTType { UTType(filenameExtension: "drbackup") ?? .data }
+
     private func exportData() {
         guard let data = store.exportSnapshot() else { return }
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [.json]
-        panel.nameFieldStringValue = "daily-routine-backup-\(todayKey()).json"
+        panel.allowedContentTypes = [backupType]
+        panel.nameFieldStringValue = "daily-routine-backup-\(todayKey()).drbackup"
         panel.canCreateDirectories = true
         if panel.runModal() == .OK, let url = panel.url {
             do {
@@ -88,7 +92,7 @@ struct DailyRoutineApp: App {
 
     private func importData() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.json]
+        panel.allowedContentTypes = [backupType, .json] // accept old plain-JSON backups too
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
