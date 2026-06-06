@@ -8,9 +8,14 @@ A native macOS daily task/routine tracker built with SwiftUI (Swift Package Mana
 swift build                  # compile
 swift run                    # run (or open the built binary directly)
 .build/arm64-apple-macosx/debug/DailyRoutineApp
+
+./scripts/test.sh            # run the test suite (auto-points DEVELOPER_DIR at Xcode for XCTest)
+./scripts/build-app.sh       # assemble build/Daily Routine.app for distribution
 ```
 
-Requirements: macOS 14+, Swift 5.9+, **Xcode Command Line Tools** (`xcode-select --install`). Full Xcode.app is NOT required. Fonts **Instrument Serif** and **JetBrains Mono** must be installed system-wide (used via `Font.custom`).
+Requirements: macOS 14+, Swift 5.9+, **Xcode Command Line Tools** (`xcode-select --install`). Full Xcode.app is NOT required **to build or run the app**. Fonts **Instrument Serif** and **JetBrains Mono** are used via `Font.custom`; when they aren't installed, `AppFonts` falls back to the system **serif/monospaced** designs so the UI still looks right (see Fonts below).
+
+**Tests need Xcode.app**: XCTest ships inside Xcode, not the CLT. `scripts/test.sh` sets `DEVELOPER_DIR` to the installed Xcode for that one command without changing your global `xcode-select`. The app build itself stays CLT-only.
 
 ## Project Structure
 
@@ -22,8 +27,8 @@ Sources/DailyRoutineApp/
 │   ├── Models.swift               # RoutineTask, TemplateTask, RoutineTemplate, AppData, Prefs, ViewMode, SettingsTab
 │   └── Entities.swift             # stub (SwiftData removed)
 ├── Store/
-│   ├── AppStore.swift             # @MainActor ObservableObject; all state + navigation + cache
-│   ├── TaskRepository.swift       # TaskRepository protocol + UserDefaultsTaskRepository + v1→v2 migration
+│   ├── AppStore.swift             # @MainActor ObservableObject; all state + navigation + cache + error surfacing
+│   ├── TaskRepository.swift       # TaskRepository protocol + FileTaskRepository (atomic file store) + StorageError + v1→v2 migration
 │   └── StoreMigration.swift       # stub (SwiftData migration removed)
 ├── Styles/
 │   └── AppStyles.swift            # AppColors, AppFonts, EyebrowStyle, PillStyle, hardShadow modifier
@@ -51,6 +56,15 @@ Sources/DailyRoutineApp/
     │   └── TemplatePickerView.swift # Sheet: pick a template (adds all its tasks); save today's tasks as template
     └── Onboarding/
         └── OnboardingView.swift   # First-launch onboarding sheet
+
+Tests/DailyRoutineAppTests/       # XCTest suite (date utils, stats math, file repo round-trip, migration, export/import)
+scripts/
+├── build-app.sh                   # assemble + (optionally) codesign Daily Routine.app
+└── test.sh                        # run tests with Xcode's XCTest SDK
+packaging/
+├── Info.plist                     # bundle metadata; ATSApplicationFontsPath=Fonts auto-registers bundled fonts
+├── Fonts/                         # (optional) drop .ttf/.otf here to ship fonts with the app
+└── AppIcon.icns                   # (optional) app icon
 ```
 
 ## Data Model
@@ -64,20 +78,29 @@ Prefs           { onboarded: Bool }
 ```
 
 - Day keys are `yyyy-MM-dd` strings (ISO, en_US_POSIX locale).
-- `AppData` is persisted as a single JSON blob to `UserDefaults` under key `routine:v2`.
-- `Prefs` is persisted to `UserDefaults` under key `routine:prefs`.
-- All saves are debounced 250ms via `DispatchWorkItem` (text edits) or immediate (structural mutations).
-- **v1 → v2 migration**: old flat `RoutineTemplate { id, name, description, priority, category }` records are auto-migrated on first load by `UserDefaultsTaskRepository.init()` — each becomes a `RoutineTemplate` group containing one `TemplateTask`. Migrated data is immediately resaved.
+- `AppData` is persisted as a single JSON document at `~/Library/Application Support/DailyRoutine/routine.json`, written **atomically** with a rolling `routine.backup.json` copy.
+- `Prefs` is persisted to `UserDefaults` under key `routine:prefs` (small, preference-shaped — UserDefaults is fine here).
+- All saves are debounced 250ms via `DispatchWorkItem` (text edits) or immediate (structural mutations). `AppDelegate.applicationWillTerminate` calls `store.flushPendingSave()` so an edit typed within the debounce window before ⌘Q is never lost.
+- **v1 → v2 migration**: old flat `RoutineTemplate { id, name, description, priority, category }` records are auto-migrated on first load — each becomes a `RoutineTemplate` group containing one `TemplateTask`. Migrated data is immediately re-persisted.
 
 ## Persistence Layer
 
-All data access goes through the `TaskRepository` protocol (`TaskRepository.swift`). The concrete implementation is `UserDefaultsTaskRepository`, which:
+All data access goes through the `TaskRepository` protocol (`TaskRepository.swift`). The concrete implementation is `FileTaskRepository`, which:
 
-- Loads `AppData` from `UserDefaults` on init; tries new format first, falls back to v1 migration, then seeds `AppData.defaultSeed` on fresh install.
-- Operates on the full dataset in memory.
-- Flushes to `UserDefaults` on every `save()` call.
+- **Storage**: writes the whole `AppData` to a JSON file in Application Support using `.atomic` writes. Before each overwrite it rolls the current good file to `routine.backup.json`, so a corrupt/failed write still leaves one recoverable copy. (UserDefaults was rejected for primary data — it's for preferences, has no atomic guarantee, and `cfprefsd` can drop large blobs.)
+- **Load order on init**: primary file → backup file → legacy `routine:v2` UserDefaults blob (migrates pre-file installs) → `AppData.defaultSeed`. Any non-primary source is immediately re-persisted to the primary file. Takes an injectable `directory:` for tests.
+- **Errors**: `save()`/`exportData()`/`importData()` throw `StorageError` (a `LocalizedError`). `AppStore` runs every write through `perform { … }`, which catches and publishes a user-facing message to `lastError`; `ContentView` shows it in an `.alert`. **No `try?` swallowing on the save path** — failures are never silent.
+- **Export/import**: `exportData()` returns pretty JSON; `importData(_:)` replaces the dataset and re-saves. Wired to File ▸ "Export Data…" (⇧⌘E) / "Import Data…" (⇧⌘I) in `DailyRoutineApp.swift` via `NSSavePanel`/`NSOpenPanel`; import asks for confirmation first, then `AppStore.importSnapshot` clears all caches and refreshes.
 
 `AppStore` holds a `private let repository: TaskRepository` and a per-day task cache (`dayCache`). After any mutation, `invalidate(day:)` clears the relevant cache entry and increments `dataVersion` (a `@Published` counter) to trigger SwiftUI re-renders.
+
+## Fonts
+
+`AppFonts` detects whether `Instrument Serif` / `JetBrains Mono` are available (`NSFont(name:size:)`) once, and uses `Font.custom` when present, otherwise `.system(size:design:.serif)` / `.system(size:design:.monospaced)`. This keeps the look intact on machines without the fonts (where plain `Font.custom` would silently fall back to the default *sans-serif*). To ship the fonts with the app, drop the `.ttf`/`.otf` files in `packaging/Fonts/` — `build-app.sh` copies them into the bundle and `ATSApplicationFontsPath` auto-registers them at launch.
+
+## Distribution
+
+`scripts/build-app.sh` builds the release binary and assembles `build/Daily Routine.app` (Info.plist, bundled fonts, optional icon). Set `SIGN_ID="Developer ID Application: …"` to code-sign; notarize separately with `xcrun notarytool` + `stapler` (commands in the script header).
 
 ## State Management
 

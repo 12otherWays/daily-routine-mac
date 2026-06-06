@@ -27,6 +27,10 @@ final class AppStore: ObservableObject {
     @Published var calendarDrawerOpen: Bool = false
     @Published var isLoading: Bool          = true
 
+    /// Non-nil whenever a persistence operation failed. The UI observes this and
+    /// shows an alert so data-loss is never silent.
+    @Published var lastError: String?       = nil
+
     // MARK: - Persisted, in-memory caches
 
     @Published private(set) var templates:  [RoutineTemplate] = []
@@ -141,28 +145,34 @@ final class AppStore: ObservableObject {
     // debounce text edits inside `updateTask` to coalesce keystroke saves.
 
     func toggleDone(_ taskId: String, for day: String) {
-        try? repository.toggleDone(id: taskId)
-        try? repository.save()
+        perform {
+            try repository.toggleDone(id: taskId)
+            try repository.save()
+        }
         invalidate(day: day)
     }
 
     func updateTask(_ task: RoutineTask, for day: String) {
-        try? repository.updateTask(task)
+        perform { try repository.updateTask(task) }
         invalidate(day: day)
         scheduleSave()
     }
 
     func addBlankTask(to day: String) {
-        try? repository.insertTask(RoutineTask(), day: day)
-        try? repository.save()
+        perform {
+            try repository.insertTask(RoutineTask(), day: day)
+            try repository.save()
+        }
         invalidate(day: day)
     }
 
     func addTasksFromTemplate(_ template: RoutineTemplate, to day: String) {
-        for task in template.tasks {
-            try? repository.insertTask(task.toTask(), day: day)
+        perform {
+            for task in template.tasks {
+                try repository.insertTask(task.toTask(), day: day)
+            }
+            try repository.save()
         }
-        try? repository.save()
         invalidate(day: day)
     }
 
@@ -171,39 +181,43 @@ final class AppStore: ObservableObject {
             TemplateTask(name: $0.name, description: $0.description, priority: $0.priority, category: $0.category)
         }
         let template = RoutineTemplate(name: name.trimmingCharacters(in: .whitespaces), tasks: templateTasks)
-        try? repository.insertTemplate(template)
+        perform { try repository.insertTemplate(template) }
         templates = repository.templates()
         scheduleSave()
     }
 
     func deleteTask(_ taskId: String, from day: String) {
-        try? repository.deleteTask(id: taskId)
-        try? repository.save()
+        perform {
+            try repository.deleteTask(id: taskId)
+            try repository.save()
+        }
         invalidate(day: day)
     }
 
     func reorderTasks(in day: String, from offsets: IndexSet, to destination: Int) {
-        try? repository.reorderTasks(day: day, fromOffsets: offsets, to: destination)
-        try? repository.save()
+        perform {
+            try repository.reorderTasks(day: day, fromOffsets: offsets, to: destination)
+            try repository.save()
+        }
         invalidate(day: day)
     }
 
     // MARK: - Template writes
 
     func addTemplate(_ template: RoutineTemplate) {
-        try? repository.insertTemplate(template)
+        perform { try repository.insertTemplate(template) }
         templates = repository.templates()
         scheduleSave()
     }
 
     func updateTemplate(_ template: RoutineTemplate) {
-        try? repository.updateTemplate(template)
+        perform { try repository.updateTemplate(template) }
         templates = repository.templates()
         scheduleSave()
     }
 
     func deleteTemplate(id: String) {
-        try? repository.deleteTemplate(id: id)
+        perform { try repository.deleteTemplate(id: id) }
         templates = repository.templates()
         scheduleSave()
     }
@@ -211,15 +225,40 @@ final class AppStore: ObservableObject {
     // MARK: - Category writes
 
     func addCategory(_ name: String) {
-        try? repository.addCategory(name)
+        perform { try repository.addCategory(name) }
         categories = repository.categories()
         scheduleSave()
     }
 
     func deleteCategory(_ name: String) {
-        try? repository.deleteCategory(name)
+        perform { try repository.deleteCategory(name) }
         categories = repository.categories()
         scheduleSave()
+    }
+
+    // MARK: - Backup / portability
+
+    /// Pretty-printed JSON snapshot for "Export Data…". Returns nil on failure
+    /// (and records the error for the UI).
+    func exportSnapshot() -> Data? {
+        do {
+            return try repository.exportData()
+        } catch {
+            recordError(error)
+            return nil
+        }
+    }
+
+    /// Replaces all data from an imported snapshot, then refreshes every cache so
+    /// the UI reflects the new dataset immediately.
+    func importSnapshot(_ data: Data) {
+        perform { try repository.importData(data) }
+        guard lastError == nil else { return }
+        dayCache.removeAll()
+        cachedStatsInput = nil
+        templates  = repository.templates()
+        categories = repository.categories()
+        dataVersion &+= 1
     }
 
     // MARK: - Navigation
@@ -271,9 +310,34 @@ final class AppStore: ObservableObject {
     private func scheduleSave() {
         saveWorkItem?.cancel()
         let item = DispatchWorkItem { [weak self] in
-            try? self?.repository.save()
+            guard let self else { return }
+            self.perform { try self.repository.save() }
         }
         saveWorkItem = item
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: item)
+    }
+
+    /// Flushes any pending debounced save synchronously. Called on app
+    /// termination so an edit typed within the 250ms debounce window before
+    /// quitting is never lost.
+    func flushPendingSave() {
+        guard saveWorkItem != nil else { return }
+        saveWorkItem?.cancel()
+        saveWorkItem = nil
+        perform { try repository.save() }
+    }
+
+    /// Runs a throwing persistence op, surfacing any failure to `lastError`
+    /// instead of silently dropping it.
+    private func perform(_ op: () throws -> Void) {
+        do {
+            try op()
+        } catch {
+            recordError(error)
+        }
+    }
+
+    private func recordError(_ error: Error) {
+        lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
     }
 }

@@ -26,3 +26,6 @@ xcuserdata/
 *.o
 *.dSYM/
 *.dSYM.zip
+
+# Packaged .app output
+build/

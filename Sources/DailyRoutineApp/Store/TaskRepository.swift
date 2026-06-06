@@ -6,6 +6,25 @@ struct TaskRecord: Hashable {
     let category: String
 }
 
+/// Errors that can surface from the persistence layer. Conforms to
+/// `LocalizedError` so the UI can show a meaningful, user-facing message
+/// instead of silently dropping data.
+enum StorageError: LocalizedError {
+    case encodeFailed(underlying: Error)
+    case writeFailed(underlying: Error)
+    case decodeFailed
+    case readFailed(underlying: Error)
+
+    var errorDescription: String? {
+        switch self {
+        case .encodeFailed(let e): return "Couldn't prepare your data for saving (\(e.localizedDescription))."
+        case .writeFailed(let e):  return "Couldn't write your data to disk (\(e.localizedDescription)). Your latest change may not be saved."
+        case .decodeFailed:        return "The selected file isn't a valid Daily Routine backup."
+        case .readFailed(let e):   return "Couldn't read the file (\(e.localizedDescription))."
+        }
+    }
+}
+
 @MainActor
 protocol TaskRepository {
     // MARK: - Task reads
@@ -37,31 +56,86 @@ protocol TaskRepository {
 
     // MARK: - Persistence
     func save() throws
+
+    // MARK: - Backup / portability
+    /// Pretty-printed JSON snapshot of the entire dataset, suitable for export.
+    func exportData() throws -> Data
+    /// Replaces the entire dataset from a previously-exported snapshot and persists it.
+    func importData(_ data: Data) throws
 }
 
+/// File-backed store. Persists the whole `AppData` as a single JSON document in
+/// Application Support, written **atomically** with a rolling backup copy.
+///
+/// Why a file and not `UserDefaults`: `UserDefaults` is for small preferences,
+/// not the user's primary data. Large blobs can be dropped or delayed by
+/// `cfprefsd`, there is no atomic guarantee, and a corrupt write loses
+/// everything. A file gives us atomic replace + a `.backup.json` fallback.
 @MainActor
-final class UserDefaultsTaskRepository: TaskRepository {
+final class FileTaskRepository: TaskRepository {
 
-    private static let dataKey = "routine:v2"
+    private static let legacyDefaultsKey = "routine:v2"
+    private static let fileName   = "routine.json"
+    private static let backupName = "routine.backup.json"
 
     private var data: AppData
+    let fileURL: URL
+    private let backupURL: URL
 
-    init() {
-        if let blob = UserDefaults.standard.data(forKey: Self.dataKey) {
-            if let decoded = try? JSONDecoder().decode(AppData.self, from: blob) {
-                data = decoded
-            } else if let legacy = try? JSONDecoder().decode(LegacyAppData.self, from: blob) {
-                // Migrate v1 flat templates (one task per template) to v2 grouped templates.
-                data = legacy.migrate()
-                if let encoded = try? JSONEncoder().encode(data) {
-                    UserDefaults.standard.set(encoded, forKey: Self.dataKey)
-                }
-            } else {
-                data = AppData.defaultSeed
-            }
-        } else {
-            data = AppData.defaultSeed
+    /// - Parameter directory: storage folder. Defaults to
+    ///   `~/Library/Application Support/DailyRoutine`. Injectable for tests.
+    init(directory: URL? = nil) {
+        let dir = directory ?? Self.defaultDirectory()
+        self.fileURL = dir.appendingPathComponent(Self.fileName)
+        self.backupURL = dir.appendingPathComponent(Self.backupName)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+
+        let (loaded, neededPersist) = Self.load(fileURL: fileURL, backupURL: backupURL)
+        self.data = loaded
+
+        // If we sourced from a backup, a legacy blob, or a v1→v2 migration,
+        // write a fresh primary file immediately so the canonical store exists.
+        if neededPersist {
+            try? persist(data, to: fileURL, backupURL: backupURL)
         }
+    }
+
+    private static func defaultDirectory() -> URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSTemporaryDirectory())
+        return base.appendingPathComponent("DailyRoutine", isDirectory: true)
+    }
+
+    // MARK: - Load (with fallbacks)
+
+    /// Returns the best-available dataset and whether it should be re-persisted
+    /// to the primary file (true when it came from a fallback source).
+    private static func load(fileURL: URL, backupURL: URL) -> (AppData, needsPersist: Bool) {
+        // 1. Primary file — the happy path.
+        if let blob = try? Data(contentsOf: fileURL), let decoded = decode(blob) {
+            return (decoded, false)
+        }
+        // 2. Backup file — primary was missing or corrupt.
+        if let blob = try? Data(contentsOf: backupURL), let decoded = decode(blob) {
+            return (decoded, true)
+        }
+        // 3. Legacy UserDefaults blob — migrate installs that predate the file store.
+        if let blob = UserDefaults.standard.data(forKey: legacyDefaultsKey), let decoded = decode(blob) {
+            return (decoded, true)
+        }
+        // 4. Fresh install.
+        return (AppData.defaultSeed, true)
+    }
+
+    /// Decodes a blob as v2 `AppData`, falling back to v1 migration.
+    private static func decode(_ blob: Data) -> AppData? {
+        if let decoded = try? JSONDecoder().decode(AppData.self, from: blob) {
+            return decoded
+        }
+        if let legacy = try? JSONDecoder().decode(LegacyAppData.self, from: blob) {
+            return legacy.migrate()
+        }
+        return nil
     }
 
     // MARK: - Legacy migration types (v1 → v2)
@@ -211,7 +285,47 @@ final class UserDefaultsTaskRepository: TaskRepository {
     // MARK: - Persistence
 
     func save() throws {
-        let encoded = try JSONEncoder().encode(data)
-        UserDefaults.standard.set(encoded, forKey: Self.dataKey)
+        try persist(data, to: fileURL, backupURL: backupURL)
+    }
+
+    /// Encodes and atomically writes `data`, keeping the previous good file as a
+    /// backup. Throws a `StorageError` describing the failed stage.
+    private func persist(_ data: AppData, to url: URL, backupURL: URL) throws {
+        let encoded: Data
+        do {
+            encoded = try JSONEncoder().encode(data)
+        } catch {
+            throw StorageError.encodeFailed(underlying: error)
+        }
+        do {
+            // Roll the current good file to backup before overwriting, so a
+            // failed/corrupt write still leaves us one recoverable copy.
+            let fm = FileManager.default
+            if fm.fileExists(atPath: url.path) {
+                try? fm.removeItem(at: backupURL)
+                try? fm.copyItem(at: url, to: backupURL)
+            }
+            try encoded.write(to: url, options: .atomic)
+        } catch {
+            throw StorageError.writeFailed(underlying: error)
+        }
+    }
+
+    // MARK: - Backup / portability
+
+    func exportData() throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        do {
+            return try encoder.encode(data)
+        } catch {
+            throw StorageError.encodeFailed(underlying: error)
+        }
+    }
+
+    func importData(_ blob: Data) throws {
+        guard let decoded = Self.decode(blob) else { throw StorageError.decodeFailed }
+        data = decoded
+        try save()
     }
 }

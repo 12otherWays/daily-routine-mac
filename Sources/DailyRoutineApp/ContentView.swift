@@ -82,6 +82,19 @@ struct ContentView: View {
             OnboardingView()
                 .environmentObject(store)
         }
+        // Surface persistence failures instead of dropping data silently.
+        .alert(
+            "Something went wrong",
+            isPresented: Binding(
+                get: { store.lastError != nil },
+                set: { if !$0 { store.lastError = nil } }
+            ),
+            presenting: store.lastError
+        ) { _ in
+            Button("OK", role: .cancel) { store.lastError = nil }
+        } message: { message in
+            Text(message)
+        }
     }
 
     private var mainLayout: some View {

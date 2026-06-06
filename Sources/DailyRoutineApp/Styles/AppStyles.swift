@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 // MARK: - Colors
 
@@ -44,24 +45,45 @@ extension Priority {
 }
 
 // MARK: - Fonts
-// Requires "Instrument Serif" and "JetBrains Mono" installed on the system
-// or bundled in the Xcode project under Resources.
+//
+// The design calls for "Instrument Serif" (display) and "JetBrains Mono" (UI).
+// When those fonts are present we use them; when they aren't (a customer who
+// hasn't installed them), `Font.custom` would silently fall back to the default
+// system *sans-serif*, which makes the whole UI look wrong. To stay graceful we
+// detect availability once and fall back to the closest system design
+// (`.serif` / `.monospaced`) so the look is preserved even without the fonts.
 
 enum AppFonts {
+    private static let displayName = "Instrument Serif"
+    private static let monoName    = "JetBrains Mono"
+
+    /// Whether a font family is actually registered/available on this machine.
+    private static func isAvailable(_ name: String) -> Bool {
+        NSFont(name: name, size: 12) != nil
+    }
+
+    static let hasDisplayFont = isAvailable(displayName)
+    static let hasMonoFont    = isAvailable(monoName)
+
     static func display(_ size: CGFloat) -> Font {
-        Font.custom("Instrument Serif", size: size)
+        hasDisplayFont ? Font.custom(displayName, size: size)
+                       : .system(size: size, design: .serif)
     }
     static func displayItalic(_ size: CGFloat) -> Font {
-        Font.custom("Instrument Serif", size: size).italic()
+        hasDisplayFont ? Font.custom(displayName, size: size).italic()
+                       : .system(size: size, design: .serif).italic()
     }
     static func mono(_ size: CGFloat) -> Font {
-        Font.custom("JetBrains Mono", size: size)
+        hasMonoFont ? Font.custom(monoName, size: size)
+                    : .system(size: size, design: .monospaced)
     }
     static func monoMedium(_ size: CGFloat) -> Font {
-        Font.custom("JetBrains Mono", size: size).weight(.medium)
+        hasMonoFont ? Font.custom(monoName, size: size).weight(.medium)
+                    : .system(size: size, weight: .medium, design: .monospaced)
     }
     static func monoBold(_ size: CGFloat) -> Font {
-        Font.custom("JetBrains Mono", size: size).weight(.semibold)
+        hasMonoFont ? Font.custom(monoName, size: size).weight(.semibold)
+                    : .system(size: size, weight: .semibold, design: .monospaced)
     }
 }
 

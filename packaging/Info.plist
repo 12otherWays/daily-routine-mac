@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>Daily Routine</string>
+    <key>CFBundleDisplayName</key>
+    <string>Daily Routine</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.yourcompany.dailyroutine</string>
+    <key>CFBundleExecutable</key>
+    <string>DailyRoutineApp</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>14.0</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <!-- Any .ttf/.otf placed in Contents/Resources/Fonts is auto-registered at
+         launch, so the app ships its own fonts instead of relying on the
+         customer having them installed. -->
+    <key>ATSApplicationFontsPath</key>
+    <string>Fonts</string>
+</dict>
+</plist>
