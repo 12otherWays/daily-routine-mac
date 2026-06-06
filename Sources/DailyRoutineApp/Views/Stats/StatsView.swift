@@ -135,7 +135,7 @@ private struct ContributionHeatmap: View {
     @State private var availableWidth: CGFloat = 0      // measured card inner width
 
     private let weekCount = 52               // ~12 months; cells size to fill the grid column
-    private let gap: CGFloat = 4
+    private let gap: CGFloat = 6
     private let labelW: CGFloat = 34
     private let weekdayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
