@@ -134,15 +134,15 @@ private struct ContributionHeatmap: View {
     @State private var stateFilter: HeatStateFilter = .all
     @State private var availableWidth: CGFloat = 0      // measured card inner width
 
-    private let weekCount = 52
-    private let gap: CGFloat = 3
-    private let labelW: CGFloat = 32
+    private let weekCount = 52               // ~12 months; cells size to fill the grid column
+    private let gap: CGFloat = 4
+    private let labelW: CGFloat = 34
     private let weekdayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
-    // Square cell sized so the weekday-label gutter + 52 columns exactly fill the
-    // measured width. Height of the card follows from this (7 · cell + gaps).
+    // Square cell sized so the weekday-label gutter + columns exactly fill the
+    // measured width. Card height follows from this (7 · cell + gaps).
     private var cell: CGFloat {
-        guard availableWidth > 0 else { return 14 }
+        guard availableWidth > 0 else { return 16 }
         let columnGaps = gap * CGFloat(weekCount - 1)
         let avail = availableWidth - labelW - gap - columnGaps
         return max(8, avail / CGFloat(weekCount))
@@ -154,35 +154,35 @@ private struct ContributionHeatmap: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            controlsRow
+        VStack(alignment: .leading, spacing: 16) {
+            topBar
+
+            // Grid spans the full card width; its measured width drives cell size.
             grid
-            legend
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .background(
+                    GeometryReader { geo in
+                        Color.clear.preference(key: HeatWidthKey.self, value: geo.size.width)
+                    }
+                )
+                .onPreferenceChange(HeatWidthKey.self) { availableWidth = $0 }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            GeometryReader { geo in
-                Color.clear.preference(key: HeatWidthKey.self, value: geo.size.width)
-            }
-        )
-        .onPreferenceChange(HeatWidthKey.self) { availableWidth = $0 }
     }
 
-    // MARK: Controls
+    // MARK: Top control bar — legend (left) · filters + range/nav (right), one line
 
-    private var controlsRow: some View {
-        HStack(spacing: 10) {
-            // Window navigation
-            navButton("chevron.left") { shiftMonths(-12) }
-            Text(rangeLabel)
-                .font(AppFonts.monoBold(11))
-                .foregroundColor(AppColors.ink)
-                .frame(minWidth: 124)
-            navButton("chevron.right", disabled: atPresent) { shiftMonths(12) }
+    private var topBar: some View {
+        HStack(alignment: .center, spacing: 16) {
+            // Legend on top, laid out horizontally
+            HStack(spacing: 14) {
+                legendItem(color(for: .empty), "No tasks")
+                legendItem(color(for: .partial), "Tasks added")
+                legendItem(color(for: .done), "All done")
+            }
 
-            Spacer()
+            Spacer(minLength: 16)
 
-            // Category filter
+            // Category + state filters
             Menu {
                 Button("All categories") { category = nil }
                 Divider()
@@ -196,7 +196,6 @@ private struct ContributionHeatmap: View {
             .menuIndicator(.hidden)
             .fixedSize()
 
-            // Completion-state filter
             Menu {
                 ForEach(HeatStateFilter.allCases, id: \.self) { f in
                     Button(f.rawValue) { stateFilter = f }
@@ -207,6 +206,16 @@ private struct ContributionHeatmap: View {
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .fixedSize()
+
+            // Range label + prev/next, all on the same line
+            Text(rangeLabel)
+                .font(AppFonts.monoBold(11))
+                .foregroundColor(AppColors.ink)
+                .fixedSize()
+            HStack(spacing: 8) {
+                navButton("chevron.left") { shiftMonths(-12) }
+                navButton("chevron.right", disabled: atPresent) { shiftMonths(12) }
+            }
         }
     }
 
@@ -308,16 +317,6 @@ private struct ContributionHeatmap: View {
     }
 
     // MARK: Legend
-
-    private var legend: some View {
-        HStack(spacing: 14) {
-            legendItem(color(for: .empty), "No tasks")
-            legendItem(color(for: .partial), "Tasks added")
-            legendItem(color(for: .done), "All done")
-            Spacer()
-        }
-        .padding(.top, 2)
-    }
 
     private func legendItem(_ c: Color, _ label: String) -> some View {
         HStack(spacing: 5) {
