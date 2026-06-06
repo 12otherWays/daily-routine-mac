@@ -102,6 +102,16 @@ Everything lives in `AppStore` (single source of truth, injected as `@Environmen
 - **Month** — MonthView calendar grid. NavBar shows month/year label.
 - **Stats** — StatsView with all-time charts/cards. NavBar hidden.
 
+## Stats — Contribution Heatmap
+
+`ContributionHeatmap` (private struct in `StatsView.swift`) renders a rolling ~12-month GitHub-style grid (`weekCount = 52`).
+
+- **Layout**: a `VStack` of a top control bar + the grid below. The grid spans the full card width (`maxWidth: .infinity`); its width is measured via `HeatWidthKey` preference and drives the square `cell` size so the weekday-label gutter (`labelW = 34`) + columns exactly fill the row.
+- **Top control bar** (`topBar`, single `HStack`): legend swatches on the left (No tasks / Tasks added / All done), then a `Spacer`, then the category filter menu, the state filter menu, the `rangeLabel` (e.g. "Jan 25 – Jan 26"), and the prev/next `<` `>` nav buttons — all on one line.
+- **Cell gap**: `gap = 6` between cells (also subtracted from the available width in the `cell` calc).
+- **Navigation**: prev/next shift the window ±12 months; next is disabled at present (`atPresent`).
+- **Filters**: `category` (nil = all) and `stateFilter` (`HeatStateFilter`) feed `heatmapWeeks(...)`. Today's cell is outlined with `AppColors.accent`.
+
 ## Sidebar Overlays
 
 DrawerView, SettingsView, and CalendarDrawerView are rendered in a `ZStack(alignment: .trailing)` in `ContentView`. They animate in/out via `.spring(response: 0.32, dampingFraction: 0.85)`.
