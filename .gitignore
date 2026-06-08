@@ -29,3 +29,7 @@ xcuserdata/
 
 # Packaged .app output
 build/
+
+# AI context files
+CLAUDE.md
+CLAUDE-MAC.md
