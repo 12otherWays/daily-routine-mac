@@ -68,10 +68,6 @@ The UI uses **Instrument Serif** (titles) and **JetBrains Mono** (labels/data) v
 
 Exported backups are AES-GCM encrypted so they aren't human-readable in a text editor — but the key is derived from a constant compiled into the app. This is deliberate **obfuscation, not real security**: anyone who inspects the binary (or this source) can recover the key. It's a conscious trade-off for a low-sensitivity to-do app, chosen to avoid the data-loss risk of a forgotten user passphrase. The app's own on-disk `routine.json` is stored as plain JSON so it stays repairable.
 
-## 📄 License
-
-> **TODO:** add a `LICENSE` file. Until then, default copyright applies and others can't legally reuse the code. MIT is a common, permissive choice for an app like this.
-
 ## 🤝 Contributing
 
 Issues and pull requests are welcome. Please run `./scripts/test.sh` before submitting.
