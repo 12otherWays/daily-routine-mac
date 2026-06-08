@@ -43,14 +43,6 @@ swift run        # build and launch
 ./scripts/build-dmg.sh   # builds the app, then packages build/Daily Routine.dmg
 ```
 
-To code-sign, pass your Developer ID:
-
-```bash
-SIGN_ID="Developer ID Application: Your Name (TEAMID)" ./scripts/build-dmg.sh
-```
-
-Notarization commands are documented in the header of each script.
-
 ## 🗂️ Project Structure
 
 ```
